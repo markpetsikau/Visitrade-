@@ -1,16 +1,20 @@
 // ─────────────────────────────────────────────────────────────
-// Session layer (demo).
+// Session layer.
 //
-// A lightweight cookie-based session so the product loop actually works:
-// signup → onboarding → dashboard → upgrade, with the app personalized
-// and gated. It is architected to swap in a real auth provider
-// (Supabase / Auth.js) without touching the UI — replace the read/write
-// helpers here and the server actions in ./actions.ts.
+// Two modes, decided at runtime by whether Supabase is configured:
+//   • Supabase  → real accounts. The session is derived from the
+//     authenticated Supabase user + their `profiles` row.
+//   • Demo      → a lightweight cookie session (no backend needed),
+//     so the product loop still works locally with zero config.
+//
+// `getSession()` is async in both modes — callers must await it.
 // ─────────────────────────────────────────────────────────────
 
 import "server-only";
 import { cookies } from "next/headers";
 import type { Plan } from "@/lib/plans";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { getServerSupabase } from "@/lib/supabase/server";
 
 export type { Plan };
 
@@ -27,7 +31,46 @@ export interface Session {
 
 export const SESSION_COOKIE = "visitrade_session";
 
-export function getSession(): Session | null {
+export async function getSession(): Promise<Session | null> {
+  if (isSupabaseConfigured()) return getSupabaseSession();
+  return getDemoSession();
+}
+
+// ── Supabase-backed session ──────────────────────────────────
+async function getSupabaseSession(): Promise<Session | null> {
+  const supabase = getServerSupabase();
+  if (!supabase) return null;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, plan, onboarded, trading_style, level, markets")
+    .eq("id", user.id)
+    .single();
+
+  const email = user.email ?? "";
+  const metaName =
+    (user.user_metadata?.name as string | undefined) ?? undefined;
+
+  return {
+    email,
+    name: profile?.name || metaName || nameFromEmail(email),
+    plan: (profile?.plan as Plan) || "free",
+    onboarded: Boolean(profile?.onboarded),
+    tradingStyle: profile?.trading_style ?? undefined,
+    level: profile?.level ?? undefined,
+    markets: profile?.markets ?? undefined,
+    // Watchlist lives in its own table now; loaded where needed.
+    watchlist: undefined,
+  };
+}
+
+// ── Demo cookie session ──────────────────────────────────────
+function getDemoSession(): Session | null {
   const raw = cookies().get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   try {

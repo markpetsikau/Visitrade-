@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getSession, SESSION_COOKIE, type Plan } from "@/lib/auth/session";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { getServerSupabase } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,8 +12,17 @@ const PRICE_ENV: Record<Exclude<Plan, "free">, string> = {
   elite: "STRIPE_PRICE_ELITE",
 };
 
-function persistPlan(plan: Plan) {
-  const s = getSession();
+async function persistPlan(plan: Plan) {
+  if (isSupabaseConfigured()) {
+    const supabase = getServerSupabase();
+    if (!supabase) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await supabase.from("profiles").update({ plan }).eq("id", user.id);
+    return;
+  }
+  const s = await getSession();
   if (!s) return;
   cookies().set(SESSION_COOKIE, JSON.stringify({ ...s, plan }), {
     httpOnly: true,
@@ -22,7 +33,7 @@ function persistPlan(plan: Plan) {
 }
 
 export async function POST(req: Request) {
-  const session = getSession();
+  const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
   }
@@ -34,7 +45,7 @@ export async function POST(req: Request) {
 
   // Downgrade / free is always a direct change.
   if (plan === "free") {
-    persistPlan("free");
+    await persistPlan("free");
     return NextResponse.json({ demo: true, plan: "free" });
   }
 
@@ -64,6 +75,6 @@ export async function POST(req: Request) {
   }
 
   // Demo mode (no keys): grant the plan immediately so the loop works.
-  persistPlan(plan);
+  await persistPlan(plan);
   return NextResponse.json({ demo: true, plan });
 }

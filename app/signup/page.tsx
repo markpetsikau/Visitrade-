@@ -1,11 +1,16 @@
 import { AuthShell, AuthField } from "@/components/marketing/AuthShell";
 import { Button } from "@/components/ui/Button";
 import { Check } from "lucide-react";
+import { AuthNotice } from "@/components/marketing/AuthNotice";
 import { signUpAction } from "@/lib/auth/actions";
 
 export const metadata = { title: "Créer un compte — VISITRADE" };
 
-export default function SignupPage() {
+export default function SignupPage({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   return (
     <AuthShell mode="signup">
       <h1 className="text-2xl font-bold tracking-tight text-ink">Créer un compte</h1>
@@ -13,10 +18,14 @@ export default function SignupPage() {
         Gratuit, sans carte bancaire. Prêt en une minute.
       </p>
 
+      {searchParams.error && (
+        <AuthNotice tone="error">{searchParams.error}</AuthNotice>
+      )}
+
       <form action={signUpAction} className="mt-8 space-y-4">
         <AuthField label="Nom" name="name" placeholder="Votre nom" autoComplete="name" />
-        <AuthField label="Email" type="email" name="email" placeholder="vous@exemple.com" autoComplete="email" />
-        <AuthField label="Mot de passe" type="password" name="password" placeholder="8 caractères minimum" autoComplete="new-password" />
+        <AuthField label="Email" type="email" name="email" placeholder="vous@exemple.com" autoComplete="email" required />
+        <AuthField label="Mot de passe" type="password" name="password" placeholder="6 caractères minimum" autoComplete="new-password" required />
         <label className="flex items-start gap-2 text-xs text-ink-muted">
           <input type="checkbox" required className="mt-0.5 h-4 w-4 rounded border-border-strong bg-surface-raised accent-brand" />
           <span>
@@ -26,17 +35,6 @@ export default function SignupPage() {
         </label>
         <Button type="submit" size="lg" className="w-full">
           Créer mon compte gratuit
-        </Button>
-      </form>
-
-      <div className="mt-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-border" />
-        <span className="text-xs text-ink-faint">ou</span>
-        <span className="h-px flex-1 bg-border" />
-      </div>
-      <form action={signUpAction} className="mt-6">
-        <Button type="submit" variant="secondary" size="lg" className="w-full">
-          S'inscrire avec Google
         </Button>
       </form>
 

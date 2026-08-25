@@ -6,8 +6,8 @@ import { getSession } from "@/lib/auth/session";
 
 export const metadata = { title: "Watchlist — VISITRADE" };
 
-export default function WatchlistPage() {
-  const session = getSession();
+export default async function WatchlistPage() {
+  const session = await getSession();
   // Seed from the assets chosen during onboarding (empty for a brand-new account).
   const initial = (session?.watchlist ?? []).filter((s) =>
     MOCK_ASSETS.some((a) => a.symbol === s),

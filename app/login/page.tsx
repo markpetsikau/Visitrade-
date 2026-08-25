@@ -1,10 +1,15 @@
 import { AuthShell, AuthField } from "@/components/marketing/AuthShell";
 import { Button } from "@/components/ui/Button";
+import { AuthNotice } from "@/components/marketing/AuthNotice";
 import { signInAction } from "@/lib/auth/actions";
 
 export const metadata = { title: "Connexion — VISITRADE" };
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: { error?: string; confirm?: string };
+}) {
   return (
     <AuthShell mode="login">
       <h1 className="text-2xl font-bold tracking-tight text-ink">Bon retour</h1>
@@ -12,9 +17,19 @@ export default function LoginPage() {
         Connectez-vous pour retrouver vos analyses.
       </p>
 
+      {searchParams.confirm && (
+        <AuthNotice tone="success">
+          Compte créé ✅ Vérifie ta boîte mail pour confirmer ton adresse, puis
+          connecte-toi.
+        </AuthNotice>
+      )}
+      {searchParams.error && (
+        <AuthNotice tone="error">{searchParams.error}</AuthNotice>
+      )}
+
       <form action={signInAction} className="mt-8 space-y-4">
-        <AuthField label="Email" type="email" name="email" placeholder="vous@exemple.com" autoComplete="email" />
-        <AuthField label="Mot de passe" type="password" name="password" placeholder="••••••••" autoComplete="current-password" />
+        <AuthField label="Email" type="email" name="email" placeholder="vous@exemple.com" autoComplete="email" required />
+        <AuthField label="Mot de passe" type="password" name="password" placeholder="••••••••" autoComplete="current-password" required />
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 text-ink-muted">
             <input type="checkbox" className="h-4 w-4 rounded border-border-strong bg-surface-raised accent-brand" />
@@ -24,17 +39,6 @@ export default function LoginPage() {
         </div>
         <Button type="submit" size="lg" className="w-full">
           Se connecter
-        </Button>
-      </form>
-
-      <div className="mt-6 flex items-center gap-3">
-        <span className="h-px flex-1 bg-border" />
-        <span className="text-xs text-ink-faint">ou</span>
-        <span className="h-px flex-1 bg-border" />
-      </div>
-      <form action={signInAction} className="mt-6">
-        <Button type="submit" variant="secondary" size="lg" className="w-full">
-          Continuer avec Google
         </Button>
       </form>
     </AuthShell>

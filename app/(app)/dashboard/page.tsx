@@ -47,7 +47,7 @@ export default async function DashboardPage() {
     analysis: analyzeAsset(a),
   }));
 
-  const session = getSession();
+  const session = await getSession();
   const watched = (session?.watchlist ?? [])
     .map((s) => assets.find((a) => a.symbol === s))
     .filter(Boolean) as typeof assets;
