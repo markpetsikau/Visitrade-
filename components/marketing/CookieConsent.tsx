@@ -29,8 +29,8 @@ export function CookieConsent() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[120] p-3 sm:p-4">
-      <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border border-border-strong bg-surface/95 p-4 shadow-2xl backdrop-blur-xl sm:flex-row sm:items-center">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[120] p-3 sm:p-4">
+      <div className="pointer-events-auto mx-auto flex max-w-3xl flex-col gap-3 rounded-2xl border border-border-strong bg-surface/95 p-4 shadow-2xl backdrop-blur-xl sm:flex-row sm:items-center">
         <Cookie className="hidden h-6 w-6 shrink-0 text-brand sm:block" />
         <p className="flex-1 text-sm leading-relaxed text-ink-muted">
           Nous utilisons des cookies nécessaires au fonctionnement du site et, avec
