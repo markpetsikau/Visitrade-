@@ -22,7 +22,8 @@ export type Feature =
   | "alerts"
   | "portfolio"
   | "journal"
-  | "export";
+  | "export"
+  | "predictions";
 
 // Minimum plan rank required for each feature.
 const MIN_RANK: Record<Feature, number> = {
@@ -35,6 +36,7 @@ const MIN_RANK: Record<Feature, number> = {
   portfolio: 1, // Pro
   journal: 2, // Elite
   export: 2, // Elite
+  predictions: 1, // Pro
 };
 
 export function hasFeature(plan: Plan | undefined, f: Feature): boolean {
@@ -60,6 +62,10 @@ export const WATCHLIST_MAX: Record<Plan, number> = {
 
 export const FREE_MONTHLY_ANALYSES = 1;
 
+// Le plan Free voit un vrai échantillon du board de probabilités
+// (données réelles, mise à jour en direct), le reste est verrouillé.
+export const FREE_PREDICTION_MARKETS = 4;
+
 export const FEATURE_LABEL: Record<Feature, string> = {
   fullAnalysis: "Analyse IA complète",
   scenarios: "Scénarios de marché",
@@ -70,4 +76,5 @@ export const FEATURE_LABEL: Record<Feature, string> = {
   portfolio: "Portfolio",
   journal: "Journal de trading",
   export: "Export de données",
+  predictions: "Probabilités de marché",
 };

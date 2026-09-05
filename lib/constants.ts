@@ -83,6 +83,7 @@ export const APP_NAV = [
   { label: "Scanner", href: "/scanner", icon: "Radar" },
   { label: "Watchlist", href: "/watchlist", icon: "Star" },
   { label: "AI Analysis", href: "/ai", icon: "Sparkles" },
+  { label: "Prédictions", href: "/predictions", icon: "Percent" },
   { label: "Scenarios", href: "/scenarios", icon: "GitBranch" },
   { label: "Portfolio", href: "/portfolio", icon: "Wallet" },
   { label: "Journal", href: "/journal", icon: "NotebookPen" },

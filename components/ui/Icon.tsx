@@ -11,6 +11,7 @@ import {
   Settings,
   BarChart3,
   MessageSquare,
+  Percent,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ const map: Record<string, LucideIcon> = {
   Settings,
   BarChart3,
   MessageSquare,
+  Percent,
 };
 
 export function Icon({

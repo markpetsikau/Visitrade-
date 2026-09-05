@@ -103,7 +103,9 @@ function startConnections() {
     }
   };
   poll();
-  setInterval(poll, 30000);
+  // 10 s : c'est ce sondage qui garantit la mise à jour continue quand le
+  // WebSocket temps réel est indisponible (réseau d'entreprise, filtrage).
+  setInterval(poll, 10000);
 
   // Real-time crypto ticks.
   connectBinance();

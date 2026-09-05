@@ -34,7 +34,7 @@ export async function fetchMarketQuotes(): Promise<Record<string, MarketQuote>> 
           `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yf)}` +
           `?interval=1d&range=3mo`;
         const r = await fetch(url, {
-          next: { revalidate: 300 },
+          next: { revalidate: 60 },
           headers: { "User-Agent": "Mozilla/5.0" },
         });
         if (!r.ok) return null;
