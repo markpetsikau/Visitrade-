@@ -38,9 +38,6 @@ git push -u origin main
 Dans Vercel : **Settings → Environment Variables**. Ajoute-les quand tu les as, puis **Redeploy** :
 
 ```
-# Données de marché (à mettre dès maintenant pour la crypto/indices temps réel)
-MARKET_DATA_PROVIDER = coingecko
-
 # Étape 3 — Vraie IA (quand tu auras ta clé Anthropic)
 ANTHROPIC_API_KEY = sk-ant-...
 
@@ -53,7 +50,7 @@ SUPABASE_SERVICE_ROLE_KEY = ...
 NEXT_PUBLIC_APP_URL = https://visitrade.vercel.app
 ```
 
-> ⚠️ **Important** : sur Vercel, ajoute **`MARKET_DATA_PROVIDER = coingecko`** tout de suite, sinon le site déployé affichera les données simulées (le tunnel local, lui, l'avait en ligne de commande).
+> ℹ️ **Données de marché** : le temps réel est le comportement par défaut — crypto via CoinGecko, indices et matières premières via Yahoo Finance, sans clé ni variable à configurer. Ajoute `MARKET_DATA_PROVIDER = mock` **uniquement** si tu veux forcer les données simulées.
 
 ---
 

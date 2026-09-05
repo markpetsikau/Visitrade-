@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // marketDataProvider — abstraction layer
 //
-// The entire app talks ONLY to this interface. Today it is backed
-// by realistic MOCK data. To go live, implement `MarketDataProvider`
-// with a real API (CoinGecko, Polygon, Twelve Data, Binance…) and
-// swap `provider` below. No UI code needs to change.
+// The entire app talks ONLY to this interface. By default it is backed
+// by REAL data (CoinGecko for crypto, Yahoo Finance for indices and
+// commodities). Set MARKET_DATA_PROVIDER=mock to force the simulated
+// dataset (offline demos, tests). No UI code needs to change either way.
 //
-// ⚠️ Data here is MOCK / illustrative — clearly flagged in the UI.
+// Le badge « Données en direct / simulées » de l'UI reflète `isLive`.
 // ─────────────────────────────────────────────────────────────
 
 import type { Asset, AssetClass } from "@/lib/types";
@@ -45,19 +45,27 @@ class MockProvider implements MarketDataProvider {
 }
 
 /*
- * Provider selection.
- *   MARKET_DATA_PROVIDER=coingecko  → live crypto (CoinGecko, free, no key)
- *                                     + mock for indices/commodities.
- *   (unset / anything else)         → fully mock (default).
+ * Sélection du provider — LE TEMPS RÉEL EST LE DÉFAUT.
  *
- * Any other real API (Polygon, Twelve Data, Binance…) just needs to
- * implement MarketDataProvider and be wired here — no UI change.
+ *   (non défini) / "live" / "coingecko" → données réelles :
+ *        crypto  = CoinGecko (API gratuite, sans clé)
+ *        indices & matières premières = Yahoo Finance (sans clé)
+ *   "mock" / "off"                     → tout simulé (démos, tests hors ligne).
+ *
+ * Avant, l'absence de variable d'environnement donnait des cours simulés :
+ * un oubli côté hébergeur suffisait à publier de fausses données en prod.
+ * Le défaut est désormais le réel ; chaque source retombe d'elle-même sur
+ * le jeu simulé en cas de panne d'API, et le badge de l'UI l'indique.
+ *
+ * Toute autre API réelle (Polygon, Twelve Data, Binance…) n'a qu'à
+ * implémenter MarketDataProvider et être branchée ici — aucun changement d'UI.
  */
 function selectProvider(): MarketDataProvider {
-  if (process.env.MARKET_DATA_PROVIDER === "coingecko") {
-    return new CoinGeckoProvider();
+  const mode = (process.env.MARKET_DATA_PROVIDER ?? "").trim().toLowerCase();
+  if (mode === "mock" || mode === "off" || mode === "simule" || mode === "simulé") {
+    return new MockProvider();
   }
-  return new MockProvider();
+  return new CoinGeckoProvider();
 }
 
 export const provider: MarketDataProvider = selectProvider();

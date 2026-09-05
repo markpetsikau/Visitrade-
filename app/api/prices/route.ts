@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { MOCK_ASSETS } from "@/lib/market-data/mock-assets";
 import { fetchMarketQuotes } from "@/lib/market-data/yahoo";
+import { provider } from "@/lib/market-data/provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,9 +11,12 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const quotes: Record<string, { price: number; change24h: number }> = {};
 
-  // Non-crypto: real quotes (Stooq) with mock fallback.
-  const real =
-    process.env.MARKET_DATA_PROVIDER === "coingecko" ? await fetchMarketQuotes() : {};
+  // Le mode (réel / simulé) est décidé au même endroit que le reste de
+  // l'app — `provider.isLive` — et non par une lecture d'env dupliquée.
+  const live = provider.isLive;
+
+  // Indices & matières premières : cours réels Yahoo, repli sur le simulé.
+  const real = live ? await fetchMarketQuotes() : {};
   for (const a of MOCK_ASSETS) {
     if (a.class !== "crypto") {
       const q = real[a.symbol];
@@ -22,7 +26,7 @@ export async function GET() {
     }
   }
 
-  if (process.env.MARKET_DATA_PROVIDER === "coingecko") {
+  if (live) {
     try {
       const res = await fetch(
         "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd" +

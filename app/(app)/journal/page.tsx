@@ -7,7 +7,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/PageHeader";
-import { PlanGate } from "@/components/app/PlanGate";
+import { ServerPlanGate } from "@/components/app/ServerPlanGate";
 import { StatCard } from "@/components/app/StatCard";
 import { EmptyState } from "@/components/app/EmptyState";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -18,6 +18,9 @@ import { Disclaimer, MockDataTag } from "@/components/ui/Disclaimer";
 import { formatPrice } from "@/lib/utils";
 
 export const metadata = { title: "Journal — VISITRADE" };
+
+// Dépend de la session (droits d’abonnement) → rendu à la demande.
+export const dynamic = "force-dynamic";
 
 type JournalEntry = {
   date: string;
@@ -56,7 +59,7 @@ export default function JournalPage() {
         }
       />
 
-      <PlanGate
+      <ServerPlanGate
         feature="journal"
         mode="blur"
         description="Le journal de trading avec statistiques de performance (taux de réussite, gain moyen en R, résultat cumulé) est réservé au plan Elite."
@@ -248,7 +251,7 @@ export default function JournalPage() {
         </Card>
       </div>
 
-      </PlanGate>
+      </ServerPlanGate>
       <Disclaimer variant="banner" className="mt-6" />
     </>
   );

@@ -57,6 +57,27 @@ export function AiAssistant() {
       });
       const data = await res.json();
       if (typeof data.live === "boolean") setLive(data.live);
+      // Le serveur revérifie session + plan : 401/403 arrivent sans réponse.
+      if (!res.ok || !data.answer) {
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            answer: {
+              blocks: [
+                {
+                  text:
+                    data.error ||
+                    "Une erreur est survenue. Réessayez dans un instant.",
+                },
+              ],
+              relatedSymbols: [],
+              disclaimer: false,
+            },
+          },
+        ]);
+        return;
+      }
       setMessages((m) => [...m, { role: "assistant", answer: data.answer }]);
     } catch {
       setMessages((m) => [

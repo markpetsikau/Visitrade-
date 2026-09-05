@@ -1,10 +1,13 @@
 import { provider } from "@/lib/market-data/provider";
 import { PageHeader } from "@/components/app/PageHeader";
 import { ScannerClient } from "@/components/app/ScannerClient";
-import { PlanGate } from "@/components/app/PlanGate";
+import { ServerPlanGate } from "@/components/app/ServerPlanGate";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 
 export const metadata = { title: "Scanner — VISITRADE" };
+
+// Dépend de la session (droits d’abonnement) → rendu à la demande.
+export const dynamic = "force-dynamic";
 
 export default async function ScannerPage() {
   const assets = await provider.listAssets();
@@ -14,13 +17,13 @@ export default async function ScannerPage() {
         title="Market Scanner"
         subtitle="Filtrez les actifs par tendance, momentum, volatilité et configuration technique."
       />
-      <PlanGate
+      <ServerPlanGate
         feature="scanner"
         mode="blur"
         description="Le scanner qui filtre les actifs par tendance, momentum, volatilité et configuration technique est réservé au plan Pro."
       >
         <ScannerClient assets={assets} />
-      </PlanGate>
+      </ServerPlanGate>
       <Disclaimer variant="banner" className="mt-6" />
     </>
   );

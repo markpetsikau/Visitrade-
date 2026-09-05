@@ -12,15 +12,18 @@ import { StatCard } from "@/components/app/StatCard";
 import { PriceChartLive } from "@/components/app/PriceChartLive";
 import { LiveAnalysis } from "@/components/app/LiveAnalysis";
 import { ScenarioCards } from "@/components/app/ScenarioCards";
-import { PlanGate } from "@/components/app/PlanGate";
+import { ServerPlanGate } from "@/components/app/ServerPlanGate";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 import { DataSourceTag } from "@/components/ui/DataSourceTag";
 import { formatPrice, formatCompact, formatPct } from "@/lib/utils";
-import { MOCK_ASSETS } from "@/lib/market-data/mock-assets";
+import { getSession } from "@/lib/auth/session";
+import { hasFeature } from "@/lib/plans";
+import { getQuota, normalizeSymbol } from "@/lib/quota";
+import { toTeaser } from "@/lib/ai/teaser";
 
-export function generateStaticParams() {
-  return MOCK_ASSETS.map((a) => ({ asset: a.symbol }));
-}
+// La page dépend de la session (droits d'accès à l'analyse) :
+// rendu à la demande, jamais mis en cache statiquement.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: { asset: string } }) {
   const a = await provider.getAsset(params.asset);
@@ -40,6 +43,15 @@ export default async function AssetPage({ params }: { params: { asset: string } 
   const asset = await provider.getAsset(params.asset);
   if (!asset) notFound();
   const analysis = analyzeAsset(asset);
+
+  // Droit d'accès calculé côté serveur : l'analyse complète n'est
+  // envoyée au navigateur que si le plan (ou le quota Free du mois)
+  // l'autorise. Sinon on ne transmet qu'un aperçu réellement amputé.
+  const session = await getSession();
+  const symbolKey = normalizeSymbol(asset.symbol);
+  const quota = await getQuota();
+  const unlimited = hasFeature(session?.plan, "fullAnalysis");
+  const entitled = unlimited || quota.symbols.includes(symbolKey);
 
   return (
     <>
@@ -95,7 +107,12 @@ export default async function AssetPage({ params }: { params: { asset: string } 
       {/* AI Analysis */}
       <section className="mt-8">
         <h2 className="mb-4 text-lg font-semibold text-ink">Analyse IA</h2>
-        <LiveAnalysis symbol={asset.symbol} initial={analysis} />
+        <LiveAnalysis
+          symbol={asset.symbol}
+          initial={entitled ? analysis : toTeaser(analysis)}
+          entitled={entitled}
+          initialQuota={{ symbols: quota.symbols, remaining: quota.remaining, unlimited }}
+        />
       </section>
 
       {/* Scenarios */}
@@ -104,13 +121,13 @@ export default async function AssetPage({ params }: { params: { asset: string } 
           <h2 className="text-lg font-semibold text-ink">Scénarios de marché</h2>
           <span className="text-xs text-ink-faint">Ordonnés par pertinence contextuelle</span>
         </div>
-        <PlanGate
+        <ServerPlanGate
           feature="scenarios"
           mode="blur"
           description="Les scénarios haussier / baissier / neutre, avec conditions, niveaux et invalidation, sont réservés au plan Pro."
         >
           <ScenarioCards scenarios={analysis.scenarios} />
-        </PlanGate>
+        </ServerPlanGate>
       </section>
 
       {/* Context / News */}

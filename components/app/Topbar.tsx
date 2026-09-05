@@ -8,7 +8,6 @@ import { Logo } from "@/components/ui/Logo";
 import { Icon } from "@/components/ui/Icon";
 import { APP_NAV } from "@/lib/constants";
 import { DataSourceTag } from "@/components/ui/DataSourceTag";
-import { LiveIndicator } from "@/components/app/LivePrices";
 import { useUnreadCount } from "@/components/app/notifications";
 import { useMe } from "@/components/app/useMe";
 import { OPEN_SEARCH_EVENT } from "@/components/app/CommandPalette";
@@ -47,7 +46,6 @@ export function Topbar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
-        <LiveIndicator className="hidden sm:inline-flex" />
         <DataSourceTag className="hidden md:inline-flex" />
         <Link
           href="/alerts"

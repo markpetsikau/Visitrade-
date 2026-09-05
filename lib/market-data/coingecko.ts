@@ -2,8 +2,8 @@
 // CoinGeckoProvider — live crypto (the whole market) via the free API.
 //
 // Fetches the top cryptos by market cap dynamically (not a fixed list),
-// with real logos. Indices & commodities stay mock. Any error falls back
-// to the mock crypto set. Free API, no key. One cached request per list.
+// with real logos. Indices & commodities come from Yahoo Finance (see
+// ./yahoo). Any error falls back to the mock set. Free APIs, no key.
 // ─────────────────────────────────────────────────────────────
 
 import type { Asset, AssetClass } from "@/lib/types";
@@ -67,7 +67,7 @@ function toAsset(m: CgMarket): Asset {
 }
 
 export class CoinGeckoProvider implements MarketDataProvider {
-  readonly source = "CoinGecko — tout le marché crypto (live) + mock (indices/matières premières)";
+  readonly source = "CoinGecko (crypto) + Yahoo Finance (indices & matières premières)";
   readonly isLive = true;
 
   private async fetchCryptos(): Promise<Asset[]> {
@@ -94,7 +94,7 @@ export class CoinGeckoProvider implements MarketDataProvider {
     }
   }
 
-  // Real indices/commodities quotes (Stooq), anchored onto the mock series.
+  // Cours réels indices/matières premières (Yahoo Finance).
   private async nonCrypto(): Promise<Asset[]> {
     const base = MOCK_ASSETS.filter((a) => a.class !== "crypto");
     const quotes = await fetchMarketQuotes();

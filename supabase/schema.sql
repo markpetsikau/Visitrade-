@@ -101,3 +101,24 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ── Quota d'analyses complètes (plan Free) ────────────────────
+-- 1 analyse complète / mois : le compteur vit ici, côté serveur,
+-- et non plus dans le localStorage du navigateur (falsifiable).
+create table if not exists public.analysis_unlocks (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid references auth.users on delete cascade not null,
+  month      text not null,                -- "2026-09"
+  symbol     text not null,
+  created_at timestamptz default now(),
+  unique (user_id, month, symbol)
+);
+
+create index if not exists analysis_unlocks_user_month
+  on public.analysis_unlocks (user_id, month);
+
+alter table public.analysis_unlocks enable row level security;
+
+drop policy if exists "own unlocks" on public.analysis_unlocks;
+create policy "own unlocks" on public.analysis_unlocks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

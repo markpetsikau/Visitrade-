@@ -15,7 +15,7 @@ import { analyzeAsset } from "@/lib/ai/analysis-engine";
 import { PageHeader } from "@/components/app/PageHeader";
 import { Greeting } from "@/components/app/Greeting";
 import { LivePrice, LiveChange } from "@/components/app/LivePrices";
-import { PlanGate } from "@/components/app/PlanGate";
+import { ServerPlanGate } from "@/components/app/ServerPlanGate";
 import { StatCard } from "@/components/app/StatCard";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { AssetIcon } from "@/components/ui/AssetIcon";
@@ -25,6 +25,9 @@ import { Button } from "@/components/ui/Button";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 
 export const metadata = { title: "Dashboard — VISITRADE" };
+
+// Dépend de la session (droits d’abonnement) → rendu à la demande.
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const assets = await provider.listAssets();
@@ -248,7 +251,7 @@ export default async function DashboardPage() {
             }
           />
           <div className="px-4 pb-4">
-            <PlanGate feature="scenarios" mode="blur">
+            <ServerPlanGate feature="scenarios" mode="blur">
               <div className="space-y-2">
                 {opportunities.slice(0, 3).map((a) => {
                   const an = analyzeAsset(a);
@@ -266,7 +269,7 @@ export default async function DashboardPage() {
                   );
                 })}
               </div>
-            </PlanGate>
+            </ServerPlanGate>
           </div>
         </Card>
       </div>
