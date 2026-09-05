@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { Asset } from "@/lib/types";
 import { AssetTable } from "@/components/app/AssetTable";
 import { EmptyState } from "@/components/app/EmptyState";
 import { AssetIcon, classLabelOf } from "@/components/ui/AssetIcon";
 import { Button } from "@/components/ui/Button";
-import { useMe } from "@/components/app/useMe";
-import { WATCHLIST_MAX } from "@/lib/plans";
+import { LEGACY_KEYS, clearLegacy, readLegacy } from "@/components/app/legacy-storage";
 import { cn } from "@/lib/utils";
 import { Star, Plus, Check, Minus, Lock } from "lucide-react";
 
@@ -20,36 +19,91 @@ export function WatchlistClient({
   initial?: string[];
 }) {
   const [watched, setWatched] = useState<string[]>(initial);
+  const [max, setMax] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const me = useMe();
-  const max = WATCHLIST_MAX[me?.plan ?? "free"];
-  const capped = Number.isFinite(max);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const capped = max !== null;
   const atCap = capped && watched.length >= max;
 
-  // Load saved watchlist (falls back to the onboarding selection).
+  // La watchlist appartient au compte : elle est lue sur le serveur, pas
+  // dans le navigateur — donc identique sur tous les appareils.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("visitrade_watchlist");
-      if (raw) setWatched(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-    setLoaded(true);
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/watchlist");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+        setMax(typeof data.max === "number" ? data.max : null);
+
+        let symbols: string[] = Array.isArray(data.symbols) ? data.symbols : [];
+
+        // Serveur vide : on reprend ce que le navigateur avait gardé,
+        // sinon la sélection faite à l'inscription.
+        if (symbols.length === 0) {
+          const legacy = readLegacy<string[]>(LEGACY_KEYS.watchlist);
+          const seed = legacy?.length ? legacy : initial;
+          if (seed.length) {
+            const saved = await fetch("/api/watchlist", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ symbols: seed }),
+            });
+            if (saved.ok) {
+              const savedData = await saved.json();
+              symbols = savedData.symbols ?? seed;
+              if (legacy) clearLegacy(LEGACY_KEYS.watchlist);
+            }
+          }
+        } else {
+          // Le serveur fait foi : la copie locale devenue obsolète part.
+          clearLegacy(LEGACY_KEYS.watchlist);
+        }
+
+        if (alive) setWatched(symbols);
+      } catch {
+        /* hors ligne : on garde la sélection d'inscription */
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist changes.
-  useEffect(() => {
-    if (loaded) localStorage.setItem("visitrade_watchlist", JSON.stringify(watched));
-  }, [watched, loaded]);
+  // Enregistrement groupé : cocher cinq actifs d'affilée = un seul appel.
+  const persist = useCallback((next: string[]) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      fetch("/api/watchlist", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: next }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          // Le serveur applique le plafond du plan : on s'aligne dessus.
+          if (d && Array.isArray(d.symbols)) setWatched(d.symbols);
+        })
+        .catch(() => {
+          /* on garde l'état affiché ; la prochaine action réessaiera */
+        });
+    }, 400);
+  }, []);
 
-  // Trim to the plan's limit once the session is known.
-  useEffect(() => {
-    if (me && Number.isFinite(max) && watched.length > max) {
-      setWatched((prev) => prev.slice(0, max));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me]);
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    },
+    [],
+  );
 
   const assetMap = useMemo(
     () => Object.fromEntries(assets.map((a) => [a.symbol, a])),
@@ -65,11 +119,21 @@ export function WatchlistClient({
 
   const toggle = (symbol: string) => {
     setWatched((prev) => {
-      if (prev.includes(symbol)) return prev.filter((s) => s !== symbol);
-      if (Number.isFinite(max) && prev.length >= max) return prev; // capped
-      return [...prev, symbol];
+      let next: string[];
+      if (prev.includes(symbol)) {
+        next = prev.filter((s) => s !== symbol);
+      } else {
+        if (max !== null && prev.length >= max) return prev; // plafond atteint
+        next = [...prev, symbol];
+      }
+      persist(next);
+      return next;
     });
   };
+
+  if (!loaded) {
+    return <div className="h-64 animate-pulse rounded-2xl bg-surface-raised/40" />;
+  }
 
   return (
     <div>
@@ -101,24 +165,34 @@ export function WatchlistClient({
 
       {pickerOpen && (
         <div className="mb-4 rounded-2xl border border-border bg-surface-raised/40 p-3">
-          <div className="mb-2 px-1 text-xs font-medium text-ink-faint">
-            Sélectionnez les actifs à suivre
+          <div className="mb-2 flex items-center justify-between px-1">
+            <span className="text-xs font-medium text-ink-faint">
+              Sélectionnez les actifs à suivre
+            </span>
+            {atCap && (
+              <span className="text-xs text-warn">
+                Plafond du plan atteint — retirez un actif pour en ajouter un autre.
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
             {assets.map((a) => {
               const active = isWatched(a.symbol);
+              const blocked = !active && atCap;
               return (
                 <button
                   key={a.symbol}
                   onClick={() => toggle(a.symbol)}
+                  disabled={blocked}
                   className={cn(
                     "group flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
                     active
                       ? "border-brand/40 bg-brand/10"
                       : "border-border bg-surface-raised/50 hover:bg-surface-hover/60",
+                    blocked && "cursor-not-allowed opacity-40 hover:bg-surface-raised/50",
                   )}
                 >
-                  <AssetIcon symbol={a.symbol} size={30} />
+                  <AssetIcon symbol={a.symbol} src={a.image} size={30} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-ink">
                       {a.symbol}

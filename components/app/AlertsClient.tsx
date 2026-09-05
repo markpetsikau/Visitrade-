@@ -10,6 +10,7 @@ import { AssetIcon } from "@/components/ui/AssetIcon";
 import { cn, formatPrice } from "@/lib/utils";
 import { getQuoteNow } from "@/components/app/LivePrices";
 import { useNotifications, markAllRead } from "@/components/app/notifications";
+import { LEGACY_KEYS, clearLegacy, readLegacy } from "@/components/app/legacy-storage";
 import { BellRing, Trash2, Plus, CheckCircle2 } from "lucide-react";
 
 type AlertType =
@@ -49,44 +50,6 @@ const TONE_BY_TYPE: Record<
   "Nouvelle analyse IA": "neutral",
 };
 
-const SEED_ALERTS: Alert[] = [
-  {
-    id: "a1",
-    symbol: "BTC",
-    type: "Prix atteint",
-    detail: "BTC franchit $66 440",
-    active: true,
-  },
-  {
-    id: "a2",
-    symbol: "ETH",
-    type: "Volatilité en hausse",
-    detail: "Volatilité 30j au-dessus de 55%",
-    active: true,
-  },
-  {
-    id: "a3",
-    symbol: "SOL",
-    type: "Configuration détectée",
-    detail: "Cassure de résistance sur $185",
-    active: false,
-  },
-  {
-    id: "a4",
-    symbol: "NDX",
-    type: "Scénario invalidé",
-    detail: "Clôture sous le support des 19 800 pts",
-    active: true,
-  },
-  {
-    id: "a5",
-    symbol: "XAU",
-    type: "Nouvelle analyse IA",
-    detail: "Nouvelle lecture IA disponible sur l'or",
-    active: false,
-  },
-];
-
 function Toggle({
   active,
   onClick,
@@ -121,30 +84,78 @@ export function AlertsClient({ assets }: { assets: Asset[] }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loaded, setLoaded] = useState(false);
 
+  const apply = (list: unknown) => {
+    if (Array.isArray(list)) setAlerts(list as Alert[]);
+  };
+
+  // Les alertes appartiennent au compte : créées sur le téléphone, elles
+  // sont là sur l'ordinateur, et un cache vidé ne les efface plus.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("visitrade_alerts");
-      if (raw) setAlerts(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
-    setLoaded(true);
-    markAllRead(); // opening the alerts page clears the bell
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/alerts");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+
+        let list: Alert[] = Array.isArray(data.alerts) ? data.alerts : [];
+
+        // Reprise unique des alertes restées dans le navigateur.
+        if (list.length === 0) {
+          const legacy = readLegacy<Alert[]>(LEGACY_KEYS.alerts);
+          if (legacy?.length) {
+            for (const a of legacy) {
+              const saved = await fetch("/api/alerts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  symbol: a.symbol,
+                  type: a.type,
+                  detail: a.detail,
+                  active: a.active,
+                  target: a.target,
+                  dir: a.dir,
+                }),
+              });
+              if (saved.ok) {
+                const d = await saved.json();
+                if (Array.isArray(d.alerts)) list = d.alerts;
+              }
+            }
+            clearLegacy(LEGACY_KEYS.alerts);
+          }
+        } else {
+          clearLegacy(LEGACY_KEYS.alerts);
+        }
+
+        if (alive) setAlerts(list);
+      } catch {
+        /* hors ligne : liste vide plutôt qu'un état trompeur */
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    })();
+
+    markAllRead(); // ouvrir la page d'alertes éteint la cloche
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  useEffect(() => {
-    if (loaded) localStorage.setItem("visitrade_alerts", JSON.stringify(alerts));
-  }, [alerts, loaded]);
-
-  // Re-sync from storage when an alert fires (the watcher updates localStorage).
+  // Une alerte vient de se déclencher (le veilleur l'a mise à jour côté
+  // serveur) : on recharge pour refléter son nouvel état.
   const notifs = useNotifications();
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("visitrade_alerts");
-      if (raw) setAlerts(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
+    if (!loaded) return;
+    fetch("/api/alerts")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && apply(d.alerts))
+      .catch(() => {
+        /* on garde l'affichage courant */
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifs.length]);
   const [symbol, setSymbol] = useState(assets[0]?.symbol ?? "");
@@ -154,13 +165,47 @@ export function AlertsClient({ assets }: { assets: Asset[] }) {
   const activeCount = alerts.filter((a) => a.active).length;
 
   function toggle(id: string) {
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, active: !a.active } : a)),
-    );
+    const target = alerts.find((a) => a.id === id);
+    if (!target) return;
+    const active = !target.active;
+    setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, active } : a)));
+    fetch("/api/alerts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && apply(d.alerts))
+      .catch(() => {
+        /* l'état affiché reste ; le prochain chargement tranchera */
+      });
   }
 
   function remove(id: string) {
     setAlerts((prev) => prev.filter((a) => a.id !== id));
+    fetch(`/api/alerts?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && apply(d.alerts))
+      .catch(() => {
+        /* idem */
+      });
+  }
+
+  function save(alert: Omit<Alert, "id">) {
+    // Affichage immédiat sous un identifiant provisoire, remplacé par la
+    // réponse du serveur (qui porte le véritable identifiant).
+    const optimistic: Alert = { ...alert, id: `tmp-${Date.now()}` };
+    setAlerts((prev) => [optimistic, ...prev]);
+    fetch("/api/alerts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(alert),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && apply(d.alerts))
+      .catch(() => {
+        setAlerts((prev) => prev.filter((a) => a.id !== optimistic.id));
+      });
   }
 
   function create(e: React.FormEvent) {
@@ -177,32 +222,29 @@ export function AlertsClient({ assets }: { assets: Asset[] }) {
         assets.find((a) => a.symbol === symbol)?.price ??
         target;
       const dir: "up" | "down" = target >= current ? "up" : "down";
-      setAlerts((prev) => [
-        {
-          id: `a-${Date.now()}`,
-          symbol,
-          type,
-          detail: `${symbol} ${dir === "up" ? "franchit" : "passe sous"} ${formatPrice(target)}`,
-          active: true,
-          target,
-          dir,
-        },
-        ...prev,
-      ]);
+      save({
+        symbol,
+        type,
+        detail: `${symbol} ${dir === "up" ? "franchit" : "passe sous"} ${formatPrice(target)}`,
+        active: true,
+        target,
+        dir,
+      });
       setValue("");
       return;
     }
 
     const detail = trimmed ? `${symbol} · ${trimmed}` : `${symbol} · ${type}`;
-    setAlerts((prev) => [
-      { id: `a-${Date.now()}`, symbol, type, detail, active: true },
-      ...prev,
-    ]);
+    save({ symbol, type, detail, active: true });
     setValue("");
   }
 
   const inputClass =
     "h-10 w-full rounded-lg border border-border-strong bg-surface-raised px-3 text-sm text-ink placeholder:text-ink-faint focus:border-brand/50 focus:outline-none focus:ring-2 focus:ring-brand/20";
+
+  if (!loaded) {
+    return <div className="h-64 animate-pulse rounded-2xl bg-surface-raised/40" />;
+  }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[340px_1fr]">

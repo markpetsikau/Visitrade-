@@ -1,57 +1,91 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLive, getQuoteNow } from "@/components/app/LivePrices";
 import { addNotification } from "@/components/app/notifications";
+import type { StoredAlert } from "@/lib/data/types";
 import { formatPrice } from "@/lib/utils";
 
-interface StoredAlert {
-  id: string;
-  symbol: string;
-  type: string;
-  detail: string;
-  active: boolean;
-  target?: number;
-  dir?: "up" | "down";
-  triggeredAt?: number;
-}
+const RELOAD_MS = 60_000;
 
-// Evaluates "Prix atteint" alerts against live prices and fires them.
+// Surveille les alertes « Prix atteint » sur les cours en direct.
+//
+// Les alertes viennent maintenant du compte (API), plus du localStorage :
+// une alerte créée sur un appareil est donc surveillée depuis n'importe
+// quel autre. Le déclenchement est écrit côté serveur.
 export function AlertsWatcher() {
   const { updatedAt } = useLive();
+  const [alerts, setAlerts] = useState<StoredAlert[]>([]);
+  // Identifiants déjà déclenchés dans cet onglet : évite une double
+  // notification entre le déclenchement et le rechargement.
+  const fired = useRef<Set<string>>(new Set());
+  const allowed = useRef(true);
 
   useEffect(() => {
-    let raw: StoredAlert[];
-    try {
-      raw = JSON.parse(localStorage.getItem("visitrade_alerts") || "[]");
-    } catch {
-      return;
-    }
-    if (!Array.isArray(raw) || raw.length === 0) return;
+    let alive = true;
 
-    let changed = false;
-    const next = raw.map((a) => {
-      if (!a.active || a.type !== "Prix atteint" || typeof a.target !== "number") return a;
+    const load = async () => {
+      if (!allowed.current) return;
+      try {
+        const res = await fetch("/api/alerts");
+        // 401/403 : pas de session, ou plan sans alertes → on arrête là.
+        if (res.status === 401 || res.status === 403) {
+          allowed.current = false;
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (alive && Array.isArray(data.alerts)) setAlerts(data.alerts);
+      } catch {
+        /* réseau indisponible : on réessaiera au prochain cycle */
+      }
+    };
+
+    load();
+    const id = setInterval(load, RELOAD_MS);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!allowed.current || alerts.length === 0) return;
+
+    for (const a of alerts) {
+      if (!a.active || a.type !== "Prix atteint" || typeof a.target !== "number") continue;
+      if (fired.current.has(a.id)) continue;
+
       const q = getQuoteNow(a.symbol);
-      if (!q) return a;
+      if (!q) continue;
+
       const hit =
         (a.dir === "up" && q.price >= a.target) ||
         (a.dir === "down" && q.price <= a.target);
-      if (hit) {
-        changed = true;
-        addNotification(
-          `Alerte : ${a.symbol}`,
-          `${a.symbol} a atteint ${formatPrice(a.target)} (actuel ${formatPrice(q.price)}).`,
-        );
-        return { ...a, active: false, triggeredAt: Date.now() };
-      }
-      return a;
-    });
+      if (!hit) continue;
 
-    if (changed) {
-      localStorage.setItem("visitrade_alerts", JSON.stringify(next));
+      fired.current.add(a.id);
+      addNotification(
+        `Alerte : ${a.symbol}`,
+        `${a.symbol} a atteint ${formatPrice(a.target)} (actuel ${formatPrice(q.price)}).`,
+      );
+
+      // Désactivation persistée : l'alerte ne se redéclenchera pas
+      // au prochain chargement, sur cet appareil comme sur les autres.
+      fetch("/api/alerts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: a.id, active: false, triggeredAt: Date.now() }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d && Array.isArray(d.alerts)) setAlerts(d.alerts);
+        })
+        .catch(() => {
+          /* le rechargement périodique remettra les choses au clair */
+        });
     }
-  }, [updatedAt]);
+  }, [updatedAt, alerts]);
 
   return null;
 }

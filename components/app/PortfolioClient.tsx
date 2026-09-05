@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Wallet, TrendingUp, Layers, Plus, Trash2, X, Search } from "lucide-react";
 import { StatCard } from "@/components/app/StatCard";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { AssetIcon } from "@/components/ui/AssetIcon";
 import { ChangeBadge } from "@/components/ui/Badge";
 import { useLive, getQuoteNow } from "@/components/app/LivePrices";
+import { LEGACY_KEYS, clearLegacy, readLegacy } from "@/components/app/legacy-storage";
+import type { StoredPosition } from "@/lib/data/types";
 import { formatPrice, formatPct, cn } from "@/lib/utils";
 
 export interface PickAsset {
@@ -26,7 +28,6 @@ interface Position {
   refPrice: number; // price at add time (fallback if no live quote)
 }
 
-const KEY = "visitrade_portfolio";
 const COLORS = ["#00D1B2", "#627EEA", "#F7931A", "#14F195", "#8B5CF6", "#F59E0B", "#EF4444", "#38BDF8"];
 
 const inputClass =
@@ -34,22 +35,82 @@ const inputClass =
 
 export function PortfolioClient({ assets }: { assets: PickAsset[] }) {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   useLive(); // re-render as live prices tick
 
-  useEffect(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(KEY) || "[]");
-      if (Array.isArray(raw)) setPositions(raw);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const assetMap = useMemo(
+    () => Object.fromEntries(assets.map((a) => [a.symbol, a])),
+    [assets],
+  );
 
-  const persist = (next: Position[]) => {
-    setPositions(next);
-    localStorage.setItem(KEY, JSON.stringify(next));
-  };
+  // Le serveur ne stocke que ce qui est propre à l'utilisateur (symbole,
+  // quantité, prix moyen) ; le nom, le logo et le prix de repli viennent
+  // des données de marché du moment.
+  const hydrate = useCallback(
+    (stored: StoredPosition[]): Position[] =>
+      stored.map((p) => {
+        const a = assetMap[p.symbol];
+        return {
+          symbol: p.symbol,
+          name: a?.name ?? p.symbol,
+          image: a?.image,
+          qty: p.qty,
+          avgPrice: p.avgPrice,
+          refPrice: getQuoteNow(p.symbol)?.price ?? a?.price ?? p.avgPrice,
+        };
+      }),
+    [assetMap],
+  );
+
+  // Les positions appartiennent au compte : elles suivent l'utilisateur
+  // d'un appareil à l'autre au lieu de vivre dans un seul navigateur.
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/positions");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+
+        let stored: StoredPosition[] = Array.isArray(data.positions) ? data.positions : [];
+
+        // Reprise unique de ce qu'un navigateur avait gardé.
+        if (stored.length === 0) {
+          const legacy = readLegacy<Position[]>(LEGACY_KEYS.portfolio);
+          if (legacy?.length) {
+            for (const p of legacy) {
+              const saved = await fetch("/api/positions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ symbol: p.symbol, qty: p.qty, avgPrice: p.avgPrice }),
+              });
+              if (saved.ok) {
+                const d = await saved.json();
+                if (Array.isArray(d.positions)) stored = d.positions;
+              }
+            }
+            clearLegacy(LEGACY_KEYS.portfolio);
+          }
+        } else {
+          clearLegacy(LEGACY_KEYS.portfolio);
+        }
+
+        if (alive) setPositions(hydrate(stored));
+      } catch {
+        /* hors ligne : portefeuille vide plutôt qu'une donnée fausse */
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const priceOf = (p: Position) => getQuoteNow(p.symbol)?.price ?? p.refPrice;
   const change24Of = (p: Position) => getQuoteNow(p.symbol)?.change24h ?? 0;
@@ -73,24 +134,54 @@ export function PortfolioClient({ assets }: { assets: PickAsset[] }) {
   const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
   const total24 = rows.reduce((s, r) => s + r.pnl24, 0);
 
-  const addPosition = (pos: Position) => {
-    // Merge if the symbol already exists (weighted average price).
+  const addPosition = async (pos: Position) => {
+    // Cumul si le symbole est déjà détenu (prix moyen pondéré).
     const existing = positions.find((p) => p.symbol === pos.symbol);
-    if (existing) {
-      const totalQty = existing.qty + pos.qty;
-      const avg = (existing.qty * existing.avgPrice + pos.qty * pos.avgPrice) / totalQty;
-      persist(
-        positions.map((p) =>
-          p.symbol === pos.symbol ? { ...p, qty: totalQty, avgPrice: avg, refPrice: pos.refPrice } : p,
-        ),
-      );
-    } else {
-      persist([...positions, pos]);
-    }
+    const qty = existing ? existing.qty + pos.qty : pos.qty;
+    const avgPrice = existing
+      ? (existing.qty * existing.avgPrice + pos.qty * pos.avgPrice) / qty
+      : pos.avgPrice;
+
     setShowForm(false);
+    // Affichage immédiat, puis confirmation par le serveur.
+    setPositions((prev) => {
+      const others = prev.filter((p) => p.symbol !== pos.symbol);
+      return [...others, { ...pos, qty, avgPrice }];
+    });
+
+    try {
+      const res = await fetch("/api/positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: pos.symbol, qty, avgPrice }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (Array.isArray(d.positions)) setPositions(hydrate(d.positions));
+      }
+    } catch {
+      /* l'affichage optimiste reste ; le prochain chargement corrigera */
+    }
   };
 
-  const remove = (symbol: string) => persist(positions.filter((p) => p.symbol !== symbol));
+  const remove = async (symbol: string) => {
+    setPositions((prev) => prev.filter((p) => p.symbol !== symbol));
+    try {
+      const res = await fetch(`/api/positions?symbol=${encodeURIComponent(symbol)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (Array.isArray(d.positions)) setPositions(hydrate(d.positions));
+      }
+    } catch {
+      /* idem */
+    }
+  };
+
+  if (!loaded) {
+    return <div className="h-64 animate-pulse rounded-2xl bg-surface-raised/40" />;
+  }
 
   return (
     <div>
@@ -200,7 +291,7 @@ function AddPositionForm({
   onClose,
 }: {
   assets: PickAsset[];
-  onAdd: (p: Position) => void;
+  onAdd: (p: Position) => void | Promise<void>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");

@@ -122,3 +122,8 @@ alter table public.analysis_unlocks enable row level security;
 drop policy if exists "own unlocks" on public.analysis_unlocks;
 create policy "own unlocks" on public.analysis_unlocks
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ── Alertes : horodatage de déclenchement ─────────────────────
+-- Ajouté après coup : une alerte déclenchée reste visible dans
+-- l'historique avec sa date, au lieu de simplement passer inactive.
+alter table public.alerts add column if not exists triggered_at timestamptz;
