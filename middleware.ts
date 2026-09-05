@@ -13,6 +13,7 @@ const PROTECTED = [
   "/scanner",
   "/watchlist",
   "/ai",
+  "/predictions",
   "/scenarios",
   "/portfolio",
   "/journal",
@@ -65,6 +66,8 @@ export async function middleware(req: NextRequest) {
   return toLogin(req);
 }
 
+// ⚠️ Next.js exige un matcher littéral (analysé à la compilation) : toute
+// route ajoutée à PROTECTED doit l'être ici aussi, sinon elle reste ouverte.
 export const config = {
   matcher: [
     "/dashboard/:path*",
@@ -72,6 +75,7 @@ export const config = {
     "/scanner/:path*",
     "/watchlist/:path*",
     "/ai/:path*",
+    "/predictions/:path*",
     "/scenarios/:path*",
     "/portfolio/:path*",
     "/journal/:path*",
