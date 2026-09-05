@@ -65,8 +65,17 @@ export function useNotifications() {
     () => version,
     () => 0,
   );
-  load();
-  return items;
+
+  // Le serveur ne connaît pas le stockage local : lire les notifications
+  // pendant le premier rendu client faisait diverger le HTML (React jetait
+  // alors tout l'arbre). On ne les révèle qu'après le montage.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    load();
+    setReady(true);
+  }, []);
+
+  return ready ? items : [];
 }
 
 export function useUnreadCount() {

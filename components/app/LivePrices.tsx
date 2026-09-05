@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Radio, Pause, Play } from "lucide-react";
 import { ChangeBadge } from "@/components/ui/Badge";
 import { formatPrice, cn } from "@/lib/utils";
 
@@ -201,45 +200,4 @@ export function LivePrice({
 export function LiveChange({ symbol, value }: { symbol: string; value: number }) {
   const q = useLiveQuote(symbol, { price: 0, change24h: value });
   return <ChangeBadge value={q.change24h} />;
-}
-
-export function LiveIndicator({ className }: { className?: string }) {
-  const { updatedAt: at, live: isLive, toggle } = useLive();
-  const [, force] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const secs = at && isLive ? Math.max(0, Math.round((Date.now() - at) / 1000)) : null;
-
-  return (
-    <button
-      onClick={toggle}
-      title={isLive ? "Mode live actif — cliquer pour mettre en pause" : "Mode live en pause"}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
-        isLive
-          ? "border-brand/25 bg-brand/10 text-brand"
-          : "border-border bg-surface-raised text-ink-muted",
-        className,
-      )}
-    >
-      {isLive ? (
-        <>
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand opacity-70" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand" />
-          </span>
-          Live{secs !== null ? ` · ${secs}s` : ""}
-          <Pause className="h-3 w-3" />
-        </>
-      ) : (
-        <>
-          <Radio className="h-3 w-3" /> En pause <Play className="h-3 w-3" />
-        </>
-      )}
-    </button>
-  );
 }

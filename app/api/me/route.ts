@@ -16,5 +16,9 @@ export async function GET() {
     initials: initials(s.name),
     plan: s.plan,
     onboarded: s.onboarded,
+    planStatus: s.planStatus,
+    planRenewsAt: s.planRenewsAt,
+    cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+    hasBilling: Boolean(s.hasBilling),
   });
 }

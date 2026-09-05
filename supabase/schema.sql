@@ -127,3 +127,15 @@ create policy "own unlocks" on public.analysis_unlocks
 -- Ajouté après coup : une alerte déclenchée reste visible dans
 -- l'historique avec sa date, au lieu de simplement passer inactive.
 alter table public.alerts add column if not exists triggered_at timestamptz;
+
+-- ── Abonnement Stripe ─────────────────────────────────────────
+-- Le plan est écrit UNIQUEMENT par le webhook Stripe (source de vérité
+-- côté paiement) ; l'application ne fait que le lire.
+alter table public.profiles add column if not exists stripe_customer_id     text;
+alter table public.profiles add column if not exists stripe_subscription_id text;
+alter table public.profiles add column if not exists plan_status            text;
+alter table public.profiles add column if not exists plan_renews_at         timestamptz;
+alter table public.profiles add column if not exists plan_cancel_at_period_end boolean default false;
+
+create index if not exists profiles_stripe_customer
+  on public.profiles (stripe_customer_id);

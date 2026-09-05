@@ -23,6 +23,14 @@ export interface Session {
   name: string;
   plan: Plan;
   onboarded: boolean;
+  /** Statut Stripe brut (active, past_due, canceled…), si abonnement. */
+  planStatus?: string;
+  /** Fin de la période payée en cours, en millisecondes. */
+  planRenewsAt?: number;
+  /** L'abonnement s'arrête à la fin de la période en cours. */
+  cancelAtPeriodEnd?: boolean;
+  /** Un client Stripe existe : le portail de gestion est ouvrable. */
+  hasBilling?: boolean;
   tradingStyle?: string;
   markets?: string[];
   level?: string;
@@ -46,9 +54,12 @@ async function getSupabaseSession(): Promise<Session | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // `select("*")` volontairement : nommer les colonnes d'abonnement ferait
+  // échouer la requête tant que la migration SQL n'est pas passée — et un
+  // profil illisible ramènerait tout le monde au plan gratuit.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("name, plan, onboarded, trading_style, level, markets")
+    .select("*")
     .eq("id", user.id)
     .single();
 
@@ -64,6 +75,12 @@ async function getSupabaseSession(): Promise<Session | null> {
     tradingStyle: profile?.trading_style ?? undefined,
     level: profile?.level ?? undefined,
     markets: profile?.markets ?? undefined,
+    planStatus: profile?.plan_status ?? undefined,
+    planRenewsAt: profile?.plan_renews_at
+      ? Date.parse(String(profile.plan_renews_at))
+      : undefined,
+    cancelAtPeriodEnd: Boolean(profile?.plan_cancel_at_period_end),
+    hasBilling: Boolean(profile?.stripe_customer_id),
     // Watchlist lives in its own table now; loaded where needed.
     watchlist: undefined,
   };

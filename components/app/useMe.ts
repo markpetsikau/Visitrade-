@@ -10,6 +10,10 @@ export interface Me {
   initials?: string;
   plan?: Plan;
   onboarded?: boolean;
+  planStatus?: string;
+  planRenewsAt?: number;
+  cancelAtPeriodEnd?: boolean;
+  hasBilling?: boolean;
 }
 
 // Small shared client fetch for session personalization.

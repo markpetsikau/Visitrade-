@@ -28,6 +28,8 @@ interface Props {
   children: React.ReactNode;
   type?: "button" | "submit";
   onClick?: () => void;
+  /** Le style désactivé existait déjà (disabled:opacity-50) sans être pilotable. */
+  disabled?: boolean;
 }
 
 export function Button({
@@ -38,6 +40,7 @@ export function Button({
   children,
   type = "button",
   onClick,
+  disabled,
 }: Props) {
   const cls = cn(
     "inline-flex items-center justify-center gap-2 whitespace-nowrap transition-all duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:opacity-50",
@@ -52,7 +55,7 @@ export function Button({
       </Link>
     );
   return (
-    <button type={type} className={cls} onClick={onClick}>
+    <button type={type} className={cls} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );

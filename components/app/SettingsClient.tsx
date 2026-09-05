@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -231,6 +231,14 @@ function ProfilSection({ me }: { me: Me | null }) {
   );
 }
 
+const STATUS_LABEL: Record<string, { label: string; tone: "brand" | "warn" | "muted" }> = {
+  active: { label: "Actif", tone: "brand" },
+  trialing: { label: "Période d'essai", tone: "brand" },
+  past_due: { label: "Paiement en attente", tone: "warn" },
+  unpaid: { label: "Impayé", tone: "warn" },
+  canceled: { label: "Résilié", tone: "muted" },
+};
+
 function AbonnementSection({
   me,
   freePlan,
@@ -242,11 +250,76 @@ function AbonnementSection({
   proPlan?: (typeof PLANS)[number];
   elitePlan?: (typeof PLANS)[number];
 }) {
-  const currentId = me?.plan ?? "free";
+  // Plan affiché : celui de la session, rafraîchi après un paiement.
+  const [live, setLive] = useState<Me | null>(me);
+  const [activating, setActivating] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
+  const [openingPortal, setOpeningPortal] = useState(false);
+
+  useEffect(() => setLive(me), [me]);
+
+  // Retour de paiement : Stripe confirme le plan par webhook, ce qui prend
+  // quelques secondes. On interroge la session au lieu d'afficher un plan
+  // périmé — ou pire, de croire l'URL sur parole.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const wanted = new URLSearchParams(window.location.search).get("upgraded");
+    if (!wanted || me?.plan === wanted) return;
+
+    setActivating(true);
+    let tries = 0;
+    const id = setInterval(async () => {
+      tries += 1;
+      try {
+        const fresh = await fetch("/api/me").then((r) => r.json());
+        setLive(fresh);
+        if (fresh.plan === wanted || tries >= 10) {
+          clearInterval(id);
+          setActivating(false);
+        }
+      } catch {
+        if (tries >= 10) {
+          clearInterval(id);
+          setActivating(false);
+        }
+      }
+    }, 2000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.plan]);
+
+  const openPortal = useCallback(async () => {
+    setOpeningPortal(true);
+    setPortalError(null);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setPortalError(data.error || "Gestion indisponible pour le moment.");
+    } catch {
+      setPortalError("Gestion indisponible pour le moment.");
+    } finally {
+      setOpeningPortal(false);
+    }
+  }, []);
+
+  const currentId = live?.plan ?? "free";
   const current = PLANS.find((p) => p.id === currentId) ?? freePlan;
   const price =
     currentId === "free" ? "0 € / mois" : `${current?.priceYearly} € / mois`;
   const isFree = currentId === "free";
+  const status = live?.planStatus ? STATUS_LABEL[live.planStatus] : null;
+  const renews = live?.planRenewsAt
+    ? new Date(live.planRenewsAt).toLocaleDateString("fr-FR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+
   return (
     <div className="space-y-4">
       <Card className="rounded-2xl border border-border bg-surface-raised/40 p-5 sm:p-6">
@@ -254,15 +327,29 @@ function AbonnementSection({
           title="Abonnement"
           subtitle="Votre plan actuel et vos options d'évolution."
         />
+        {activating && (
+          <div className="mb-4 rounded-xl border border-brand/25 bg-brand/[0.06] px-4 py-3 text-sm text-ink-muted">
+            Paiement reçu — activation de votre plan en cours. Cette page se met à
+            jour toute seule dès que Stripe a confirmé.
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="text-2xl font-bold text-ink">
               {PLAN_LABEL[currentId]}
             </span>
             <Badge tone={isFree ? "muted" : "brand"}>Plan actuel</Badge>
+            {status && <Badge tone={status.tone}>{status.label}</Badge>}
           </div>
           <span className="text-sm text-ink-muted">{price}</span>
         </div>
+        {renews && (
+          <p className="mt-2 text-xs text-ink-faint">
+            {live?.cancelAtPeriodEnd
+              ? `Résiliation demandée — accès conservé jusqu'au ${renews}.`
+              : `Prochain renouvellement le ${renews}.`}
+          </p>
+        )}
         <ul className="mt-4 grid gap-2 sm:grid-cols-2">
           {(current?.features ?? []).map((f) => (
             <li key={f} className="flex items-start gap-2 text-sm text-ink-muted">
@@ -279,12 +366,22 @@ function AbonnementSection({
             <div>
               <p className="text-sm font-medium text-ink">Gérer l'abonnement</p>
               <p className="text-sm text-ink-muted">
-                Changez de plan ou revenez au plan gratuit à tout moment.
+                Formule, moyen de paiement, factures et résiliation.
               </p>
+              {portalError && (
+                <p className="mt-1.5 text-xs text-warn">{portalError}</p>
+              )}
             </div>
-            <Button variant="outline" href="/pricing">
-              Gérer les plans
-            </Button>
+            <div className="flex gap-2">
+              {live?.hasBilling && (
+                <Button variant="primary" onClick={openPortal} disabled={openingPortal}>
+                  {openingPortal ? "Ouverture…" : "Gérer mon abonnement"}
+                </Button>
+              )}
+              <Button variant="outline" href="/pricing">
+                Comparer les plans
+              </Button>
+            </div>
           </div>
         </Card>
       )}
