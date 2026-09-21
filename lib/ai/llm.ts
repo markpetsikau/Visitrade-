@@ -26,6 +26,18 @@ export function isLlmEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+/**
+ * `live` dit si le contenu vient VRAIMENT du modèle, pas si la clé existe.
+ *
+ * La présence d'une clé ne garantit rien : modèle inconnu, quota épuisé,
+ * schéma refusé → on replie sur le moteur simulé. Afficher « IA en direct »
+ * dans ce cas ferait payer un abonné pour une réponse générée localement.
+ */
+export interface LlmResult<T> {
+  value: T;
+  live: boolean;
+}
+
 let _client: Anthropic | null = null;
 function client(): Anthropic {
   if (!_client) _client = new Anthropic();
@@ -117,10 +129,10 @@ const ANALYSIS_SCHEMA = {
   },
 };
 
-export async function llmAnalyzeAsset(asset: Asset): Promise<AiAnalysis> {
+export async function llmAnalyzeAsset(asset: Asset): Promise<LlmResult<AiAnalysis>> {
   // Deterministic base carries the exact numeric fields (levels, observed…).
   const base = analyzeAsset(asset);
-  if (!isLlmEnabled()) return base;
+  if (!isLlmEnabled()) return { value: base, live: false };
 
   try {
     const data = {
@@ -154,7 +166,7 @@ Consignes de rédaction :
       ANALYSIS_SCHEMA,
     );
 
-    return {
+    const value: AiAnalysis = {
       ...base,
       context: n.context || base.context,
       trend: { ...base.trend, note: n.trendNote || base.trend.note },
@@ -170,10 +182,11 @@ Consignes de rédaction :
       summary: n.summary || base.summary,
       generatedAt: "à l'instant (IA en direct)",
     };
+    return { value, live: true };
   } catch (error) {
     // Panne, quota, schéma refusé → repli déterministe, cause tracée.
     logLlmFailure(`analyse ${asset.symbol}`, error);
-    return base;
+    return { value: base, live: false };
   }
 }
 
@@ -202,8 +215,8 @@ const ASSISTANT_SCHEMA = {
   },
 };
 
-export async function llmAssistant(question: string): Promise<AssistantAnswer> {
-  if (!isLlmEnabled()) return answerQuestion(question);
+export async function llmAssistant(question: string): Promise<LlmResult<AssistantAnswer>> {
+  if (!isLlmEnabled()) return { value: answerQuestion(question), live: false };
 
   try {
     // L'assistant raisonnait sur le jeu de données SIMULÉ, même quand la
@@ -225,11 +238,11 @@ Réponds via le JSON demandé :
 - Jamais de certitude ni de promesse de gain.`,
       ASSISTANT_SCHEMA,
     );
-    if (!answer.blocks?.length) return answerQuestion(question);
-    return { ...answer, disclaimer: true };
+    if (!answer.blocks?.length) return { value: answerQuestion(question), live: false };
+    return { value: { ...answer, disclaimer: true }, live: true };
   } catch (error) {
     logLlmFailure("assistant", error);
-    return answerQuestion(question);
+    return { value: answerQuestion(question), live: false };
   }
 }
 

@@ -35,8 +35,8 @@ export async function POST(req: Request) {
     if (typeof question !== "string" || !question.trim()) {
       return NextResponse.json({ error: "Question manquante." }, { status: 400 });
     }
-    const answer = await llmAssistant(question.slice(0, 500));
-    return NextResponse.json({ answer, live: isLlmEnabled() });
+    const { value: answer, live } = await llmAssistant(question.slice(0, 500));
+    return NextResponse.json({ answer, live });
   } catch {
     return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }

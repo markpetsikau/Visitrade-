@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { provider } from "@/lib/market-data/provider";
-import { llmAnalyzeAsset, isLlmEnabled } from "@/lib/ai/llm";
+import { llmAnalyzeAsset } from "@/lib/ai/llm";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { getSession } from "@/lib/auth/session";
 import { hasFeature } from "@/lib/plans";
@@ -54,8 +54,8 @@ export async function POST(req: Request) {
     if (!asset) {
       return NextResponse.json({ error: "Actif introuvable." }, { status: 404 });
     }
-    const analysis = await llmAnalyzeAsset(asset);
-    return NextResponse.json({ analysis, live: isLlmEnabled() });
+    const { value: analysis, live } = await llmAnalyzeAsset(asset);
+    return NextResponse.json({ analysis, live });
   } catch {
     return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }
