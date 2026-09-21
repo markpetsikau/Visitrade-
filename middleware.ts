@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isMfaPending } from "@/lib/auth/mfa";
 
 const SESSION_COOKIE = "visitrade_session";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,6 +34,20 @@ function toLogin(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+/*
+ * Mot de passe validé, code à usage unique pas encore fourni.
+ * La session existe donc, mais elle ne doit ouvrir aucune page : on
+ * renvoie vers l'écran de vérification, pas vers la connexion — sinon
+ * l'utilisateur retaperait son mot de passe en boucle sans jamais
+ * comprendre pourquoi ça recommence.
+ */
+function toMfa(req: NextRequest) {
+  const url = req.nextUrl.clone();
+  url.pathname = "/mfa";
+  url.searchParams.set("next", req.nextUrl.pathname);
+  return NextResponse.redirect(url);
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -56,7 +71,10 @@ export async function middleware(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (needsAuth(pathname) && !user) return toLogin(req);
+    if (needsAuth(pathname)) {
+      if (!user) return toLogin(req);
+      if (await isMfaPending(supabase)) return toMfa(req);
+    }
     return res;
   }
 

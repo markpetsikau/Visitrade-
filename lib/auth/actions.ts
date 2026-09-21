@@ -17,6 +17,9 @@ import {
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { sendWelcomeEmail } from "@/lib/email";
+import { isDemoAllowed } from "@/lib/demo-mode";
+import { MIN_PASSWORD_LENGTH, passwordProblem } from "@/lib/password";
+import { isMfaPending } from "@/lib/auth/mfa";
 
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
@@ -35,7 +38,7 @@ function frMessage(raw: string): string {
   if (m.includes("already registered") || m.includes("already been"))
     return "Un compte existe déjà avec cet email.";
   if (m.includes("password") && m.includes("at least"))
-    return "Le mot de passe doit contenir au moins 6 caractères.";
+    return `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
   if (m.includes("invalid login") || m.includes("invalid credentials"))
     return "Email ou mot de passe incorrect.";
   if (m.includes("email not confirmed"))
@@ -53,6 +56,12 @@ export async function signUpAction(formData: FormData) {
   if (isSupabaseConfigured()) {
     if (!email || !password) {
       redirect(`/signup?error=${encodeURIComponent("Email et mot de passe requis.")}`);
+    }
+    // Politique appliquée ici, pas seulement dans le navigateur : le
+    // formulaire se contourne, cette action non.
+    const weak = passwordProblem(password);
+    if (weak) {
+      redirect(`/signup?error=${encodeURIComponent(weak)}`);
     }
     const supabase = getServerSupabase()!;
     const { data, error } = await supabase.auth.signUp({
@@ -72,7 +81,10 @@ export async function signUpAction(formData: FormData) {
     redirect("/onboarding");
   }
 
-  // Demo fallback.
+  // Demo fallback — jamais en production (comptes sans mot de passe réel).
+  if (!isDemoAllowed()) {
+    redirect(`/signup?error=${encodeURIComponent("Inscription momentanément indisponible.")}`);
+  }
   const demoEmail = email || "trader@visitrade.app";
   writeDemo({ email: demoEmail, name, plan: "free", onboarded: false });
   await sendWelcomeEmail(demoEmail, name);
@@ -92,6 +104,12 @@ export async function signInAction(formData: FormData) {
     if (error) {
       redirect(`/login?error=${encodeURIComponent(frMessage(error.message))}`);
     }
+    // Compte protégé par un second facteur : on s'arrête là, l'écran
+    // de vérification prend la suite.
+    if (await isMfaPending(supabase)) {
+      redirect("/mfa");
+    }
+
     // Route to onboarding on first login, else the dashboard.
     const {
       data: { user },
@@ -108,7 +126,10 @@ export async function signInAction(formData: FormData) {
     redirect(onboarded ? "/dashboard" : "/onboarding");
   }
 
-  // Demo fallback: any credentials accepted.
+  // Demo fallback: any credentials accepted — jamais en production.
+  if (!isDemoAllowed()) {
+    redirect(`/login?error=${encodeURIComponent("Connexion momentanément indisponible.")}`);
+  }
   const existing = await getSession();
   const demoEmail = email || "trader@visitrade.app";
   writeDemo({
@@ -185,20 +206,4 @@ export async function completeOnboardingAction(input: OnboardingInput) {
     watchlist: input.watchlist,
   });
   redirect("/dashboard");
-}
-
-// Demo plan change (used when Stripe is not configured).
-export async function setPlanAction(plan: Plan) {
-  if (isSupabaseConfigured()) {
-    const supabase = getServerSupabase()!;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) redirect("/login");
-    await supabase.from("profiles").update({ plan }).eq("id", user!.id);
-    return;
-  }
-  const s = await getSession();
-  if (!s) redirect("/login");
-  writeDemo({ ...s!, plan });
 }

@@ -12,9 +12,11 @@
 
 import "server-only";
 import { cookies } from "next/headers";
-import type { Plan } from "@/lib/plans";
+import { planAfterGrace, type Plan } from "@/lib/plans";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { isMfaPending } from "@/lib/auth/mfa";
+import { allowDemoFallback } from "@/lib/demo-mode";
 
 export type { Plan };
 
@@ -25,6 +27,8 @@ export interface Session {
   onboarded: boolean;
   /** Statut Stripe brut (active, past_due, canceled…), si abonnement. */
   planStatus?: string;
+  /** Entrée en impayé, en millisecondes — borne le délai de grâce. */
+  pastDueSince?: number;
   /** Fin de la période payée en cours, en millisecondes. */
   planRenewsAt?: number;
   /** L'abonnement s'arrête à la fin de la période en cours. */
@@ -54,6 +58,10 @@ async function getSupabaseSession(): Promise<Session | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // Deuxième verrou, après le middleware : une session restée au premier
+  // facteur ne doit ouvrir aucune route d'API, même appelée directement.
+  if (await isMfaPending(supabase)) return null;
+
   // `select("*")` volontairement : nommer les colonnes d'abonnement ferait
   // échouer la requête tant que la migration SQL n'est pas passée — et un
   // profil illisible ramènerait tout le monde au plan gratuit.
@@ -67,15 +75,27 @@ async function getSupabaseSession(): Promise<Session | null> {
   const metaName =
     (user.user_metadata?.name as string | undefined) ?? undefined;
 
+  const pastDueSince = profile?.past_due_since
+    ? Date.parse(String(profile.past_due_since))
+    : undefined;
+  // Un impayé qui traîne au-delà du délai de grâce ramène au gratuit,
+  // sans attendre que Stripe finisse par envoyer `canceled`.
+  const plan = planAfterGrace(
+    (profile?.plan as Plan) || "free",
+    profile?.plan_status ?? undefined,
+    Number.isFinite(pastDueSince) ? pastDueSince : undefined,
+  );
+
   return {
     email,
     name: profile?.name || metaName || nameFromEmail(email),
-    plan: (profile?.plan as Plan) || "free",
+    plan,
     onboarded: Boolean(profile?.onboarded),
     tradingStyle: profile?.trading_style ?? undefined,
     level: profile?.level ?? undefined,
     markets: profile?.markets ?? undefined,
     planStatus: profile?.plan_status ?? undefined,
+    pastDueSince: Number.isFinite(pastDueSince) ? pastDueSince : undefined,
     planRenewsAt: profile?.plan_renews_at
       ? Date.parse(String(profile.plan_renews_at))
       : undefined,
@@ -88,6 +108,8 @@ async function getSupabaseSession(): Promise<Session | null> {
 
 // ── Demo cookie session ──────────────────────────────────────
 function getDemoSession(): Session | null {
+  // Le cookie démo n'est pas signé : il est ignoré en production.
+  if (!allowDemoFallback()) return null;
   const raw = cookies().get(SESSION_COOKIE)?.value;
   if (!raw) return null;
   try {
