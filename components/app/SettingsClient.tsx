@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PLANS } from "@/lib/constants";
 import { useMe, PLAN_LABEL, type Me } from "@/components/app/useMe";
-import { signOutAction } from "@/lib/auth/actions";
+import { SecuritySection } from "@/components/app/SecuritySection";
 import {
   User,
   CreditCard,
@@ -16,8 +16,6 @@ import {
   ShieldCheck,
   Check,
   Sparkles,
-  LogOut,
-  Trash2,
 } from "lucide-react";
 
 const inputClass =
@@ -156,7 +154,7 @@ export function SettingsClient() {
         {active === "notifications" && (
           <NotificationsSection notifs={notifs} setNotifs={setNotifs} />
         )}
-        {active === "securite" && <SecuriteSection />}
+        {active === "securite" && <SecuritySection />}
       </div>
     </div>
   );
@@ -602,92 +600,5 @@ function NotificationsSection({
         ))}
       </ul>
     </Card>
-  );
-}
-
-function SecuriteSection() {
-  return (
-    <div className="space-y-4">
-      <Card className="rounded-2xl border border-border bg-surface-raised/40 p-5 sm:p-6">
-        <SectionTitle
-          title="Sécurité"
-          subtitle="Protégez l'accès à votre compte VISITRADE."
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Mot de passe actuel">
-            <input
-              type="password"
-              className={inputClass}
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
-          </Field>
-          <div className="hidden sm:block" />
-          <Field label="Nouveau mot de passe">
-            <input
-              type="password"
-              className={inputClass}
-              placeholder="••••••••"
-              autoComplete="new-password"
-            />
-          </Field>
-          <Field label="Confirmer le mot de passe">
-            <input
-              type="password"
-              className={inputClass}
-              placeholder="••••••••"
-              autoComplete="new-password"
-            />
-          </Field>
-        </div>
-
-        <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-raised/60 p-3.5">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
-          <p className="text-sm text-ink-muted">
-            L'authentification à deux facteurs (2FA) sera bientôt disponible pour
-            renforcer la protection de votre compte.
-          </p>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <Button variant="primary">Mettre à jour le mot de passe</Button>
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl border border-border bg-surface-raised/40 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-ink">Session</p>
-            <p className="text-sm text-ink-muted">
-              Déconnectez-vous de cet appareil.
-            </p>
-          </div>
-          <form action={signOutAction}>
-            <Button type="submit" variant="outline">
-              <LogOut className="mr-2 h-4 w-4" />
-              Se déconnecter
-            </Button>
-          </form>
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl border border-bear/40 bg-bear/5 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-bear">Supprimer le compte</p>
-            <p className="text-sm text-ink-muted">
-              Cette action est définitive et supprime toutes vos données.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            className="border-bear/50 text-bear hover:bg-bear/10"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Supprimer le compte
-          </Button>
-        </div>
-      </Card>
-    </div>
   );
 }
