@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/ui/Logo";
 import { DISCLAIMER_LONG } from "@/lib/constants";
+import { CookiePreferencesLink } from "@/components/marketing/CookiePreferencesLink";
 
 const cols = [
   {
@@ -9,16 +10,16 @@ const cols = [
       { label: "Fonctionnalités", href: "/features" },
       { label: "Comment ça marche", href: "/how-it-works" },
       { label: "Tarifs", href: "/pricing" },
-      { label: "Dashboard", href: "/dashboard" },
+      { label: "Prédictions", href: "/features#predictions" },
     ],
   },
   {
     title: "Ressources",
     links: [
       { label: "FAQ", href: "/faq" },
-      { label: "Assistant IA", href: "/ai" },
-      { label: "Scanner", href: "/scanner" },
-      { label: "Scénarios", href: "/scenarios" },
+      { label: "Assistant IA", href: "/features#assistant-ia" },
+      { label: "Scanner", href: "/features#scanner" },
+      { label: "Scénarios", href: "/features#scenarios" },
     ],
   },
   {
@@ -60,6 +61,11 @@ export function Footer() {
                     </Link>
                   </li>
                 ))}
+                {col.title === "Légal" && (
+                  <li>
+                    <CookiePreferencesLink />
+                  </li>
+                )}
               </ul>
             </div>
           ))}
