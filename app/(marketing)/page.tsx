@@ -18,6 +18,8 @@ import { FaqList } from "@/components/marketing/FaqList";
 import { FAQ_ITEMS } from "@/lib/faq";
 import { FEATURES } from "@/lib/features";
 import { Disclaimer } from "@/components/ui/Disclaimer";
+import { provider } from "@/lib/market-data/provider";
+import { MOCK_ASSETS } from "@/lib/market-data/mock-assets";
 
 const testimonials = [
   { name: "Léa M.", role: "Swing trader crypto", quote: "Je comprends enfin le contexte d'un actif en 30 secondes au lieu d'une heure de graphiques." },
@@ -35,7 +37,19 @@ const steps = [
   { icon: Sparkles, title: "4 · Scénarios & décision", text: "Trois scénarios avec niveaux et invalidation vous aident à préparer vos décisions." },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Le bandeau annonçait « 18+ actifs couverts » — le chiffre du jeu de
+  // démonstration d'origine, alors que l'app suit désormais les 250
+  // premières cryptos plus les indices et matières premières. On compte
+  // ce qui est réellement servi, avec repli sur le chiffre minimal garanti.
+  let assetCount = MOCK_ASSETS.length;
+  try {
+    assetCount = (await provider.listAssets()).length;
+  } catch {
+    /* repli */
+  }
+  const assetLabel = assetCount >= 50 ? `${Math.floor(assetCount / 10) * 10}+` : `${assetCount}`;
+
   return (
     <>
       {/* ───────────── HERO ───────────── */}
@@ -92,7 +106,7 @@ export default function LandingPage() {
       <section className="border-y border-border bg-surface/40">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-5 py-8 sm:grid-cols-4">
           {[
-            { k: "18+", v: "actifs couverts" },
+            { k: assetLabel, v: "actifs couverts" },
             { k: "3", v: "classes d'actifs" },
             { k: "10+", v: "indicateurs par analyse" },
             { k: "3", v: "scénarios par actif" },
@@ -121,7 +135,7 @@ export default function LandingPage() {
           {FEATURES.map((f) => (
             <Link
               key={f.title}
-              href={f.href}
+              href={`/features#${f.slug}`}
               className="group rounded-2xl border border-border bg-surface-raised/50 p-6 transition-all duration-200 hover:border-brand/30 hover:bg-surface-hover"
             >
               <div className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-brand/10 text-brand transition-colors group-hover:bg-brand/15">
@@ -194,7 +208,7 @@ export default function LandingPage() {
                 </li>
               ))}
             </ul>
-            <Button href="/scenarios" variant="outline" size="md" className="mt-8">
+            <Button href="/features#scenarios" variant="outline" size="md" className="mt-8">
               Voir les scénarios <ArrowRight className="h-4 w-4" />
             </Button>
           </div>

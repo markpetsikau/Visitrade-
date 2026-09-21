@@ -25,7 +25,8 @@ export default function FeaturesPage() {
         {FEATURES.map((f, i) => (
           <div
             key={f.title}
-            className="grid items-center gap-8 rounded-2xl border border-border bg-surface-raised/40 p-8 md:grid-cols-2"
+            id={f.slug}
+            className="grid scroll-mt-24 items-center gap-8 rounded-2xl border border-border bg-surface-raised/40 p-8 md:grid-cols-2"
           >
             <div className={i % 2 === 1 ? "md:order-2" : ""}>
               <div className="mb-4 grid h-12 w-12 place-items-center rounded-xl bg-brand/10 text-brand">
@@ -40,8 +41,8 @@ export default function FeaturesPage() {
                 </span>
                 <span className="text-sm text-ink-muted">{f.problem}</span>
               </div>
-              <Button href={f.href} variant="outline" size="sm" className="mt-5">
-                Explorer <ArrowRight className="h-3.5 w-3.5" />
+              <Button href="/signup" variant="outline" size="sm" className="mt-5">
+                Essayer gratuitement <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </div>
             <div className={i % 2 === 1 ? "md:order-1" : ""}>

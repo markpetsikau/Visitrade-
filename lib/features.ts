@@ -4,7 +4,12 @@ export interface Feature {
   tagline: string;
   description: string;
   problem: string;
-  href: string;
+  /**
+   * Ancre sur la page /features. Les pages publiques renvoient ici, jamais
+   * vers une route de l'application : un visiteur qui découvre le produit
+   * n'a rien à faire dans le tableau de bord avant d'avoir un compte.
+   */
+  slug: string;
 }
 
 export const FEATURES: Feature[] = [
@@ -15,7 +20,7 @@ export const FEATURES: Feature[] = [
     description:
       "Sélectionnez un actif, l'IA synthétise tendance, volatilité, momentum, niveaux clés et contexte en une analyse structurée.",
     problem: "Trop de données, trop peu de temps pour les lire.",
-    href: "/ai",
+    slug: "analyse-ia",
   },
   {
     icon: "GitBranch",
@@ -24,7 +29,7 @@ export const FEATURES: Feature[] = [
     description:
       "Trois scénarios (haussier, baissier, neutre) avec conditions, niveaux à surveiller, invalidation et facteurs favorables/défavorables.",
     problem: "Le marché n'a pas un seul avenir — il faut s'y préparer.",
-    href: "/scenarios",
+    slug: "scenarios",
   },
   {
     icon: "BarChart3",
@@ -33,7 +38,7 @@ export const FEATURES: Feature[] = [
     description:
       "Performance, volatilité, volume, momentum, drawdown, corrélations et historique — dans un tableau de bord lisible.",
     problem: "Les stats brutes sont illisibles et dispersées.",
-    href: "/markets",
+    slug: "statistiques",
   },
   {
     icon: "Radar",
@@ -42,7 +47,7 @@ export const FEATURES: Feature[] = [
     description:
       "Filtrez les actifs par tendance, volatilité, momentum, volume, variation et configuration technique.",
     problem: "Passer en revue chaque actif à la main est impossible.",
-    href: "/scanner",
+    slug: "scanner",
   },
   {
     icon: "Star",
@@ -51,7 +56,7 @@ export const FEATURES: Feature[] = [
     description:
       "Construisez votre liste d'actifs suivis et gardez l'œil sur leurs signaux et analyses en un coup d'œil.",
     problem: "Suivre ses actifs sur dix onglets fait perdre le fil.",
-    href: "/watchlist",
+    slug: "watchlist",
   },
   {
     icon: "MessageSquare",
@@ -60,7 +65,7 @@ export const FEATURES: Feature[] = [
     description:
       "« Pourquoi le BTC baisse ? », « Quels niveaux sur le Nasdaq ? », « Compare BTC et ETH » — des réponses structurées et honnêtes.",
     problem: "Comprendre le « pourquoi » demande de croiser des sources.",
-    href: "/ai",
+    slug: "assistant-ia",
   },
   {
     icon: "Wallet",
@@ -69,7 +74,16 @@ export const FEATURES: Feature[] = [
     description:
       "Consignez vos trades, suivez votre performance et vos statistiques personnelles pour apprendre de vos décisions.",
     problem: "Sans journal, on répète les mêmes erreurs.",
-    href: "/journal",
+    slug: "portfolio-journal",
+  },
+  {
+    icon: "Percent",
+    title: "Prédictions de marché",
+    tagline: "Des probabilités, pas des promesses.",
+    description:
+      "Des questions binaires datées — « BTC au-dessus de 80 000 $ d'ici 7 jours ? » — dont la probabilité est calculée sur le cours réel et la volatilité réalisée, et se recalcule à chaque mouvement.",
+    problem: "« Ça va monter ? » n'a pas de réponse ; « quelle probabilité ? » en a une.",
+    slug: "predictions",
   },
   {
     icon: "Bell",
@@ -78,6 +92,6 @@ export const FEATURES: Feature[] = [
     description:
       "Prix atteint, volatilité en hausse, configuration détectée, scénario invalidé ou nouvelle analyse IA disponible.",
     problem: "Impossible de surveiller les marchés 24h/24.",
-    href: "/alerts",
+    slug: "alertes",
   },
 ];

@@ -19,7 +19,8 @@ import type { Asset, AiAnalysis } from "@/lib/types";
 import type { AssistantAnswer } from "@/lib/ai/assistant";
 import { analyzeAsset } from "@/lib/ai/analysis-engine";
 import { answerQuestion } from "@/lib/ai/assistant";
-import { MOCK_ASSETS } from "@/lib/market-data/mock-assets";
+import { provider } from "@/lib/market-data/provider";
+import { captureError } from "@/lib/observability";
 
 export function isLlmEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -41,18 +42,41 @@ RÈGLES ABSOLUES :
 - Ton : professionnel, clair, honnête, en français. Aucun conseil en investissement personnalisé.
 - Tu reçois des données de marché structurées ; appuie ton analyse dessus, n'invente pas de chiffres.`;
 
-async function callJson<T>(system: string, user: string, schema: object): Promise<T> {
-  const res = await client().messages.create({
+type JsonSchema = Record<string, unknown>;
+
+async function callJson<T>(system: string, user: string, schema: JsonSchema): Promise<T> {
+  const res = await client().messages.parse({
     model: MODEL,
     max_tokens: 4000,
-    thinking: { type: "disabled" },
     system,
-    output_config: { format: { type: "json_schema", schema } } as never,
+    // Réponse contrainte par le schéma : le modèle ne peut pas renvoyer
+    // autre chose que la forme attendue par l'application.
+    output_config: {
+      format: { type: "json_schema", schema },
+      // Effort réduit plutôt que réflexion désactivée : sur Opus 5,
+      // couper la réflexion fait parfois fuiter des balises internes
+      // dans le texte — ce qui casserait le JSON.
+      effort: "low",
+    },
     messages: [{ role: "user", content: user }],
   });
+
+  if (res.parsed_output) return res.parsed_output as T;
+
   const block = res.content.find((b) => b.type === "text");
-  if (!block || block.type !== "text") throw new Error("Empty LLM response");
+  if (!block || block.type !== "text") throw new Error("Réponse LLM vide");
   return JSON.parse(block.text) as T;
+}
+
+/**
+ * Trace la cause d'un repli sur le moteur simulé.
+ *
+ * Ce repli est invisible pour le client : il reçoit une analyse, elle est
+ * juste beaucoup moins bonne — alors qu'il paie pour l'IA. Sans alerte,
+ * une clé expirée peut dégrader le produit pendant des semaines.
+ */
+function logLlmFailure(where: string, error: unknown) {
+  captureError(where === "assistant" ? "ai.assistant" : "ai.analysis", error, { where });
 }
 
 // ── Asset analysis: numbers stay deterministic, narrative comes from the LLM ──
@@ -146,8 +170,9 @@ Consignes de rédaction :
       summary: n.summary || base.summary,
       generatedAt: "à l'instant (IA en direct)",
     };
-  } catch {
-    // Any error (no credit, network, schema) → deterministic fallback.
+  } catch (error) {
+    // Panne, quota, schéma refusé → repli déterministe, cause tracée.
+    logLlmFailure(`analyse ${asset.symbol}`, error);
     return base;
   }
 }
@@ -181,19 +206,10 @@ export async function llmAssistant(question: string): Promise<AssistantAnswer> {
   if (!isLlmEnabled()) return answerQuestion(question);
 
   try {
-    // Ground the model on the current (mock) market snapshot.
-    const snapshot = MOCK_ASSETS.map((a) => ({
-      symbol: a.symbol,
-      name: a.name,
-      class: a.class,
-      price: a.price,
-      changePct24h: a.changePct24h,
-      changePct7d: a.changePct7d,
-      volatility: a.volatility,
-      momentum: a.momentum,
-      trendStrength: a.trendStrength,
-      rsi: a.rsi,
-    }));
+    // L'assistant raisonnait sur le jeu de données SIMULÉ, même quand la
+    // clé était présente : il citait un BTC figé à 64 820 $. Il travaille
+    // désormais sur les cours réels, comme le reste de l'application.
+    const snapshot = await marketSnapshot(question);
     const answer = await callJson<AssistantAnswer>(
       POSITIONING,
       `Question de l'utilisateur : "${question}"
@@ -211,7 +227,47 @@ Réponds via le JSON demandé :
     );
     if (!answer.blocks?.length) return answerQuestion(question);
     return { ...answer, disclaimer: true };
-  } catch {
+  } catch (error) {
+    logLlmFailure("assistant", error);
     return answerQuestion(question);
   }
+}
+
+/**
+ * Photo du marché envoyée au modèle : les actifs cités dans la question,
+ * puis les plus gros du marché. Borné, sinon les 250 cryptos suivies
+ * feraient exploser le contexte à chaque question.
+ */
+async function marketSnapshot(question: string) {
+  const assets = await provider.listAssets();
+  const asked = question.toUpperCase();
+
+  const cited = assets.filter(
+    (a) => asked.includes(a.symbol) || asked.includes(a.name.toUpperCase()),
+  );
+  const majors = assets
+    .filter((a) => a.class !== "crypto")
+    .concat(
+      assets
+        .filter((a) => a.class === "crypto")
+        .sort((x, y) => (y.marketCap ?? 0) - (x.marketCap ?? 0))
+        .slice(0, 20),
+    );
+
+  const seen = new Set<string>();
+  return [...cited, ...majors]
+    .filter((a) => (seen.has(a.symbol) ? false : seen.add(a.symbol)))
+    .slice(0, 40)
+    .map((a) => ({
+      symbol: a.symbol,
+      name: a.name,
+      class: a.class,
+      price: a.price,
+      changePct24h: a.changePct24h,
+      changePct7d: a.changePct7d,
+      volatility: a.volatility,
+      momentum: a.momentum,
+      trendStrength: a.trendStrength,
+      rsi: a.rsi,
+    }));
 }

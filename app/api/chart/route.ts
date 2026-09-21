@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { provider } from "@/lib/market-data/provider";
+import { fetchYahooCandles } from "@/lib/market-data/yahoo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Candle = { time: number; open: number; high: number; low: number; close: number };
 
-// Synthesize plausible candles from a close series (for mock assets that
-// have no live OHLC endpoint — indices, commodities).
+// Dernier recours seulement : ces mèches sont fabriquées à partir d'un
+// sinus sur la série des clôtures. On n'y arrive plus que si CoinGecko ET
+// Yahoo sont tous les deux injoignables — auquel cas la réponse porte
+// `live: false` et l'interface le signale.
 function synth(spark: number[], days: number): Candle[] {
   if (spark.length < 2) return [];
   const now = Math.floor(Date.now() / 1000);
@@ -60,6 +63,12 @@ export async function GET(req: Request) {
     }
   }
 
-  // Mock / non-crypto → synthesized candles from the sparkline.
+  // Indices & matières premières → OHLC réel Yahoo Finance.
+  const yahoo = await fetchYahooCandles(asset.symbol, days);
+  if (yahoo && yahoo.length > 1) {
+    return NextResponse.json({ candles: yahoo, live: true });
+  }
+
+  // Les deux sources sont tombées : bougies approchées, signalées comme telles.
   return NextResponse.json({ candles: synth(asset.spark, days), live: false });
 }

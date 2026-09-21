@@ -9,8 +9,16 @@ export const metadata = { title: "Alertes — VISITRADE" };
 // Dépend de la session (droits d’abonnement) → rendu à la demande.
 export const dynamic = "force-dynamic";
 
-export default async function AlertsPage() {
+export default async function AlertsPage({
+  searchParams,
+}: {
+  searchParams?: { symbol?: string };
+}) {
   const assets = await provider.listAssets();
+  // Arrivée depuis la fiche d'un actif (bouton « Alerte ») : le sélecteur
+  // s'ouvre directement sur cet actif plutôt que sur le premier de la liste.
+  const preset = searchParams?.symbol?.toUpperCase();
+  const initialSymbol = assets.some((a) => a.symbol === preset) ? preset : undefined;
   return (
     <>
       <PageHeader
@@ -22,7 +30,7 @@ export default async function AlertsPage() {
         mode="blur"
         description="Les alertes personnalisées (prix, volatilité, configuration, scénario invalidé, nouvelle analyse IA) sont réservées au plan Pro."
       >
-        <AlertsClient assets={assets} />
+        <AlertsClient assets={assets} initialSymbol={initialSymbol} />
       </ServerPlanGate>
       <Disclaimer variant="banner" className="mt-6" />
     </>

@@ -1,12 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Star, Bell, ArrowLeft, Newspaper } from "lucide-react";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
 import { provider } from "@/lib/market-data/provider";
 import { analyzeAsset } from "@/lib/ai/analysis-engine";
 import { AssetIcon, classLabelOf } from "@/components/ui/AssetIcon";
 import { Badge, TrendBadge } from "@/components/ui/Badge";
 import { LivePrice, LiveChange } from "@/components/app/LivePrices";
-import { Button } from "@/components/ui/Button";
+import { AssetActions } from "@/components/app/AssetActions";
 import { Card } from "@/components/ui/Card";
 import { StatCard } from "@/components/app/StatCard";
 import { PriceChartLive } from "@/components/app/PriceChartLive";
@@ -30,14 +30,10 @@ export async function generateMetadata({ params }: { params: { asset: string } }
   return { title: a ? `${a.symbol} · ${a.name} — VISITRADE` : "Actif — VISITRADE" };
 }
 
-const mockNews: Record<string, { tag: string; text: string }[]> = {};
-function contextFor(symbol: string) {
-  return [
-    { tag: "Contexte", text: "Le sentiment de marché global reste un facteur clé à surveiller cette semaine." },
-    { tag: "Macro", text: "Les publications économiques à venir peuvent influencer la volatilité court terme." },
-    { tag: "Technique", text: "La réaction aux niveaux clés proches déterminera le scénario dominant." },
-  ];
-}
+// Cette section affichait trois phrases fixes, identiques pour tous les
+// actifs, sous le titre « Contexte & actualités » — un habillage qui
+// ressemblait à de l'information de marché sans en être. Elle expose
+// désormais les facteurs de risque réellement calculés pour CET actif.
 
 export default async function AssetPage({ params }: { params: { asset: string } }) {
   const asset = await provider.getAsset(params.asset);
@@ -79,17 +75,14 @@ export default async function AssetPage({ params }: { params: { asset: string } 
             </span>
             <LiveChange symbol={asset.symbol} value={asset.changePct24h} />
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm"><Star className="h-4 w-4" /> Suivre</Button>
-            <Button variant="secondary" size="sm"><Bell className="h-4 w-4" /> Alerte</Button>
-          </div>
+          <AssetActions symbol={asset.symbol} />
         </div>
       </div>
 
       {/* Chart */}
       <Card className="mt-5 p-5">
         <div className="mb-1 flex items-center justify-end">
-          <DataSourceTag />
+          <DataSourceTag assetClass={asset.class} />
         </div>
         <PriceChartLive symbol={asset.symbol} />
       </Card>
@@ -130,20 +123,28 @@ export default async function AssetPage({ params }: { params: { asset: string } 
         </ServerPlanGate>
       </section>
 
-      {/* Context / News */}
-      <section className="mt-8">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-ink">
-          <Newspaper className="h-4 w-4 text-ink-muted" /> Contexte & actualités
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {contextFor(asset.symbol).map((n, i) => (
-            <Card key={i} className="p-4">
-              <Badge tone="muted" className="mb-2">{n.tag}</Badge>
-              <p className="text-sm leading-relaxed text-ink-muted">{n.text}</p>
-            </Card>
-          ))}
-        </div>
-      </section>
+      {/* Facteurs de risque — calculés sur les données de cet actif */}
+      {analysis.riskFactors.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-ink">
+            <ShieldAlert className="h-4 w-4 text-ink-muted" /> Points de vigilance
+          </h2>
+          <p className="mb-4 text-xs text-ink-faint">
+            Établis à partir des données observées sur {asset.symbol} — volatilité,
+            momentum, distance aux niveaux clés.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {analysis.riskFactors.slice(0, 6).map((r, i) => (
+              <Card key={i} className="p-4">
+                <Badge tone="muted" className="mb-2">
+                  Risque {i + 1}
+                </Badge>
+                <p className="text-sm leading-relaxed text-ink-muted">{r}</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Disclaimer variant="banner" className="mt-8" />
     </>

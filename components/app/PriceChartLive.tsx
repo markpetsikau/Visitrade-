@@ -11,6 +11,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { cn } from "@/lib/utils";
+import { useLiveQuote } from "@/components/app/LivePrices";
 
 function movingAverage(
   candles: { time: number; close: number }[],
@@ -44,6 +45,13 @@ export function PriceChartLive({ symbol, height = 340 }: { symbol: string; heigh
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [empty, setEmpty] = useState(false);
+
+  // Le graphique était figé : les bougies étaient chargées une fois puis
+  // plus jamais touchées, alors que le prix affiché juste au-dessus
+  // avançait à chaque tick. La dernière bougie suit désormais le flux
+  // temps réel — c'est elle qui bouge sous l'œil.
+  const lastCandleRef = useRef<Candle | null>(null);
+  const quote = useLiveQuote(symbol, { price: 0, change24h: 0 });
 
   // Create the chart once.
   useEffect(() => {
@@ -114,8 +122,10 @@ export function PriceChartLive({ symbol, height = 340 }: { symbol: string; heigh
           return true;
         });
         if (clean.length === 0) {
+          lastCandleRef.current = null;
           setEmpty(true);
         } else {
+          lastCandleRef.current = { ...clean[clean.length - 1] };
           seriesRef.current.setData(
             clean.map((c) => ({
               time: c.time as UTCTimestamp,
@@ -138,6 +148,30 @@ export function PriceChartLive({ symbol, height = 340 }: { symbol: string; heigh
       alive = false;
     };
   }, [symbol, days]);
+
+  // Chaque tick prolonge la bougie en cours : la clôture suit le prix,
+  // le plus-haut et le plus-bas s'étendent si le prix les dépasse.
+  useEffect(() => {
+    const series = seriesRef.current;
+    const last = lastCandleRef.current;
+    if (!series || !last || !(quote.price > 0)) return;
+
+    const next: Candle = {
+      ...last,
+      close: quote.price,
+      high: Math.max(last.high, quote.price),
+      low: Math.min(last.low, quote.price),
+    };
+    lastCandleRef.current = next;
+    // `update` réécrit la dernière bougie sans reconstruire la série.
+    series.update({
+      time: next.time as UTCTimestamp,
+      open: next.open,
+      high: next.high,
+      low: next.low,
+      close: next.close,
+    });
+  }, [quote.price]);
 
   return (
     <div>

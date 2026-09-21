@@ -10,6 +10,7 @@ import type { Asset, AssetClass } from "@/lib/types";
 import type { MarketDataProvider } from "./provider";
 import { MOCK_ASSETS, MOCK_ASSET_MAP } from "./mock-assets";
 import { fetchMarketQuotes } from "./yahoo";
+import { captureError } from "@/lib/observability";
 import {
   computeRSI,
   computeVolatility,
@@ -89,8 +90,11 @@ export class CoinGeckoProvider implements MarketDataProvider {
         out.push(toAsset(m));
       }
       return out;
-    } catch {
-      return MOCK_ASSETS.filter((a) => a.class === "crypto"); // fallback
+    } catch (error) {
+      // Repli sur le jeu simulé : le produit vend du temps réel, une
+      // panne de source ne doit pas passer inaperçue.
+      captureError("market.coingecko", error, { endpoint: "coins/markets" });
+      return MOCK_ASSETS.filter((a) => a.class === "crypto");
     }
   }
 

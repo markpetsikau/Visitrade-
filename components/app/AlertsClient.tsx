@@ -80,7 +80,13 @@ function Toggle({
   );
 }
 
-export function AlertsClient({ assets }: { assets: Asset[] }) {
+export function AlertsClient({
+  assets,
+  initialSymbol,
+}: {
+  assets: Asset[];
+  initialSymbol?: string;
+}) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -158,7 +164,7 @@ export function AlertsClient({ assets }: { assets: Asset[] }) {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifs.length]);
-  const [symbol, setSymbol] = useState(assets[0]?.symbol ?? "");
+  const [symbol, setSymbol] = useState(initialSymbol ?? assets[0]?.symbol ?? "");
   const [type, setType] = useState<AlertType>(ALERT_TYPES[0]);
   const [value, setValue] = useState("");
 

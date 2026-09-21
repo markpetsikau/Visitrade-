@@ -3,9 +3,21 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
-// Self-determining data-source badge. Fetches the provider status once
-// and shows whether crypto data is live (CoinGecko) or simulated.
-export function DataSourceTag({ className }: { className?: string }) {
+// Badge de provenance des données.
+//
+// L'infobulle citait « Stooq », une source qui n'est plus utilisée. Et
+// surtout, « Données en direct » était affiché à l'identique pour une
+// crypto (flux Binance, tick par tick) et pour le CAC ou l'or (cotation
+// Yahoo rafraîchie environ toutes les minutes) : deux réalités très
+// différentes sous la même étiquette. Le badge distingue désormais les
+// deux quand la classe d'actif est connue.
+export function DataSourceTag({
+  className,
+  assetClass,
+}: {
+  className?: string;
+  assetClass?: string;
+}) {
   const [live, setLive] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -18,16 +30,29 @@ export function DataSourceTag({ className }: { className?: string }) {
   if (live === null) return null;
 
   if (live) {
+    const delayed = assetClass !== undefined && assetClass !== "crypto";
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded-full border border-brand/25 bg-brand/10 px-2 py-0.5 text-[10px] font-medium text-brand",
+          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+          delayed
+            ? "border-border-strong bg-surface-raised text-ink-muted"
+            : "border-brand/25 bg-brand/10 text-brand",
           className,
         )}
-        title="Crypto en temps réel (CoinGecko/Binance). Indices, or & matières premières en données réelles (Stooq)."
+        title={
+          delayed
+            ? "Cotation réelle Yahoo Finance, rafraîchie environ toutes les minutes."
+            : "Cours réel en continu : flux Binance (tick par tick), complété par CoinGecko."
+        }
       >
-        <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-brand" />
-        Données en direct
+        <span
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            delayed ? "bg-ink-faint" : "animate-pulse-dot bg-brand",
+          )}
+        />
+        {delayed ? "Cotation différée (~1 min)" : "Temps réel"}
       </span>
     );
   }
@@ -38,7 +63,7 @@ export function DataSourceTag({ className }: { className?: string }) {
         "inline-flex items-center gap-1 rounded-full border border-warn/25 bg-warn/10 px-2 py-0.5 text-[10px] font-medium text-warn",
         className,
       )}
-      title="Données simulées — l'architecture est prête à brancher une API réelle (MARKET_DATA_PROVIDER=coingecko)."
+      title="Données simulées (MARKET_DATA_PROVIDER=mock). Retirez cette variable pour repasser en données réelles."
     >
       <span className="h-1.5 w-1.5 rounded-full bg-warn" />
       Données simulées

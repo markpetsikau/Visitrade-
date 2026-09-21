@@ -44,6 +44,8 @@ function subscribeSym(sym: string, cb: () => void) {
   if (!set) {
     set = new Set();
     symSubs.set(sym, set);
+    // Symbole affiché pour la première fois : on demande son flux.
+    requestStream(sym);
   }
   set.add(cb);
   return () => {
@@ -51,39 +53,111 @@ function subscribeSym(sym: string, cb: () => void) {
   };
 }
 
-// ── Connection manager (singleton) ──
+// ── Connexion temps réel (singleton) ──
+//
+// Le flux global `!ticker@arr` était ouvert mais ne délivrait jamais rien
+// (payload de tout le marché, filtré ou étranglé selon le réseau) : les
+// prix n'avançaient donc qu'au sondage HTTP. On s'abonne désormais aux
+// flux CIBLÉS des symboles réellement affichés, ajoutés à chaud quand un
+// composant en demande un nouveau. Les cours changent alors sous l'œil,
+// tick par tick.
+
+// Symboles qui ne viennent pas d'une place crypto : indices et matières
+// premières restent servis par le sondage HTTP.
+const NON_CRYPTO = new Set([
+  "SPX", "NDX", "DJI", "DAX", "VIX", "XAU", "XAG", "WTI", "NG", "HG",
+]);
+
+const WS_URL = "wss://stream.binance.com:9443/stream";
+const RECONNECT_MS = 3000;
+
 let started = false;
 let ws: WebSocket | null = null;
 let pending: Record<string, Quote> = {};
+let reconnectAt = RECONNECT_MS;
+
+/** Symboles voulus (base en majuscules) et flux déjà souscrits. */
+const wanted = new Set<string>();
+const subscribed = new Set<string>();
+let flushStreamsTimer: ReturnType<typeof setTimeout> | null = null;
+let requestId = 1;
+
+function streamName(symbol: string): string {
+  return `${symbol.toLowerCase()}usdt@ticker`;
+}
+
+function requestStream(symbol: string) {
+  if (NON_CRYPTO.has(symbol) || wanted.has(symbol)) return;
+  wanted.add(symbol);
+  scheduleStreamSync();
+}
+
+/** Les abonnements partent groupés : Binance limite les messages par seconde. */
+function scheduleStreamSync() {
+  if (flushStreamsTimer) return;
+  flushStreamsTimer = setTimeout(() => {
+    flushStreamsTimer = null;
+    syncStreams();
+  }, 250);
+}
+
+function syncStreams() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const toAdd = [...wanted].filter((s) => !subscribed.has(s));
+  if (!toAdd.length) return;
+  // 200 flux par message : large sous la limite de 1024 par connexion.
+  for (let i = 0; i < toAdd.length; i += 200) {
+    const chunk = toAdd.slice(i, i + 200);
+    ws.send(
+      JSON.stringify({
+        method: "SUBSCRIBE",
+        params: chunk.map(streamName),
+        id: requestId++,
+      }),
+    );
+    chunk.forEach((sym) => subscribed.add(sym));
+  }
+}
 
 function connectBinance() {
   try {
-    ws = new WebSocket("wss://stream.binance.com:9443/ws/!ticker@arr");
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      reconnectAt = RECONNECT_MS;
+      subscribed.clear(); // une nouvelle connexion repart sans abonnement
+      syncStreams();
+    };
+
     ws.onmessage = (ev) => {
       if (!live) return;
-      let arr: any;
+      let msg: { stream?: string; data?: { s?: string; c?: string; P?: string } };
       try {
-        arr = JSON.parse(ev.data);
+        msg = JSON.parse(ev.data);
       } catch {
         return;
       }
-      if (!Array.isArray(arr)) return;
-      for (const t of arr) {
-        const s: string = t.s;
-        if (typeof s === "string" && s.endsWith("USDT")) {
-          const base = s.slice(0, -4);
-          const price = parseFloat(t.c);
-          const change24h = parseFloat(t.P);
-          if (Number.isFinite(price)) pending[base] = { price, change24h };
-        }
-      }
+      const d = msg?.data;
+      if (!d?.s || typeof d.c !== "string") return;
+      const pair = d.s;
+      if (!pair.endsWith("USDT")) return;
+      const base = pair.slice(0, -4);
+      const price = parseFloat(d.c);
+      const change24h = parseFloat(d.P ?? "0");
+      if (Number.isFinite(price)) pending[base] = { price, change24h };
     };
+
     ws.onclose = () => {
-      setTimeout(() => connectBinance(), 3000);
+      ws = null;
+      subscribed.clear();
+      // Reconnexion avec palier croissant, plafonnée à 30 s.
+      setTimeout(connectBinance, reconnectAt);
+      reconnectAt = Math.min(reconnectAt * 2, 30_000);
     };
+
     ws.onerror = () => ws?.close();
   } catch {
-    /* WS unavailable → HTTP poll still runs */
+    /* WebSocket indisponible → le sondage HTTP prend le relais */
   }
 }
 
@@ -91,8 +165,12 @@ function startConnections() {
   if (started || typeof window === "undefined") return;
   started = true;
 
-  // HTTP baseline (non-crypto + coins not on Binance + fallback).
+  // Socle HTTP : indices, matières premières, cryptos absentes de Binance,
+  // et filet de sécurité si le WebSocket est filtré.
   const poll = async () => {
+    // Mise en pause demandée par l'utilisateur : on ne consomme ni
+    // réseau ni quota d'API tant que le direct est coupé.
+    if (!live) return;
     try {
       const r = await fetch("/api/prices");
       const d = await r.json();
@@ -102,20 +180,18 @@ function startConnections() {
     }
   };
   poll();
-  // 10 s : c'est ce sondage qui garantit la mise à jour continue quand le
-  // WebSocket temps réel est indisponible (réseau d'entreprise, filtrage).
   setInterval(poll, 10000);
 
-  // Real-time crypto ticks.
   connectBinance();
 
-  // Flush batched WS updates ~1.2s (keeps re-renders smooth).
+  // Les ticks reçus sont appliqués 4 fois par seconde : assez vif pour
+  // voir le chiffre bouger, assez groupé pour ne pas saturer le rendu.
   setInterval(() => {
     if (live && Object.keys(pending).length) {
       applyQuotes(pending);
       pending = {};
     }
-  }, 1200);
+  }, 250);
 }
 
 // ── Hooks ──
