@@ -78,3 +78,29 @@ export const FEATURE_LABEL: Record<Feature, string> = {
   export: "Export de données",
   predictions: "Probabilités de marché",
 };
+
+// Délai de grâce sur un impayé.
+//
+// Stripe passe l'abonnement en `past_due` dès le premier échec de
+// paiement et relance pendant plusieurs jours. On ne coupe pas l'accès
+// tout de suite — un plafond de carte, ça arrive. Mais au-delà de ce
+// délai, le compte revient au plan gratuit même si Stripe n'a pas encore
+// dit `canceled` : sinon un impayé jamais résolu donne un abonnement à vie.
+export const PAST_DUE_GRACE_DAYS = 15;
+
+/**
+ * Le plan payant vaut-il encore, compte tenu du statut de paiement ?
+ * `pastDueSince` est en millisecondes, `now` injectable pour les tests.
+ */
+export function planAfterGrace(
+  plan: Plan,
+  planStatus: string | undefined,
+  pastDueSince: number | undefined,
+  now: number = Date.now(),
+): Plan {
+  if (plan === "free" || planStatus !== "past_due") return plan;
+  // Statut en impayé sans date d'entrée : on accorde le bénéfice du doute.
+  if (!pastDueSince) return plan;
+  const elapsedDays = (now - pastDueSince) / 86_400_000;
+  return elapsedDays > PAST_DUE_GRACE_DAYS ? "free" : plan;
+}

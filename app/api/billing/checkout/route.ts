@@ -5,6 +5,8 @@ import type { Plan } from "@/lib/plans";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured, priceIdFor, type Cycle } from "@/lib/billing/stripe";
+import { isDemoAllowed } from "@/lib/demo-mode";
+import { captureError } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +50,20 @@ export async function POST(req: Request) {
   const priceId = priceIdFor(plan, cycle);
   const origin = new URL(req.url).origin;
 
+  // Stripe est branché mais le prix de la périodicité demandée manque :
+  // on refuse plutôt que de facturer autre chose que ce qui est affiché.
+  if (stripe && !priceId) {
+    return NextResponse.json(
+      {
+        error:
+          cycle === "yearly"
+            ? "La facturation annuelle n'est pas encore disponible. Choisissez « Mensuel »."
+            : "Ce plan n'est pas encore ouvert à la souscription.",
+      },
+      { status: 503 },
+    );
+  }
+
   if (stripe && priceId) {
     try {
       const customer = await ensureCustomer(session.email, session.name);
@@ -63,13 +79,21 @@ export async function POST(req: Request) {
         metadata: { plan, email: session.email },
       });
       return NextResponse.json({ url: checkout.url });
-    } catch {
+    } catch (error) {
+      captureError("billing.checkout", error, { plan, cycle });
       return NextResponse.json({ error: "Stripe indisponible." }, { status: 502 });
     }
   }
 
   // Mode démo (aucune clé) : le plan est accordé tout de suite pour que
-  // la boucle produit reste jouable sans compte Stripe.
+  // la boucle produit reste jouable sans compte Stripe. Interdit en
+  // production — sinon le bouton « Passer au Pro » distribue l'abonnement.
+  if (!isDemoAllowed()) {
+    return NextResponse.json(
+      { error: "Le paiement n'est pas disponible pour le moment." },
+      { status: 503 },
+    );
+  }
   await grantDemoPlan(plan);
   return NextResponse.json({ demo: true, plan });
 }

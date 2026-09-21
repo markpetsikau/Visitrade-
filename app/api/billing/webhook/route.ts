@@ -4,6 +4,7 @@ import type { Plan } from "@/lib/plans";
 import { getAdminSupabase } from "@/lib/supabase/admin";
 import { getStripe, planForPrice, statusGrantsAccess } from "@/lib/billing/stripe";
 import { sendPlanActivatedEmail } from "@/lib/email";
+import { captureError, captureIssue } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,8 +59,9 @@ export async function POST(req: Request) {
       default:
         break;
     }
-  } catch {
+  } catch (error) {
     // Stripe réessaie si l'on renvoie une erreur : on la signale.
+    captureError("billing.webhook", error, { eventType: event.type, eventId: event.id });
     return NextResponse.json({ error: "Traitement impossible." }, { status: 500 });
   }
 
@@ -68,7 +70,16 @@ export async function POST(req: Request) {
 
 async function applySubscription(stripe: Stripe, sub: Stripe.Subscription) {
   const admin = getAdminSupabase();
-  if (!admin) return; // pas de clé service role → rien à écrire
+  if (!admin) {
+    // Panne silencieuse la plus coûteuse du projet : le paiement est
+    // encaissé, le plan n'est jamais accordé, et rien ne le signale.
+    captureIssue(
+      "billing.webhook",
+      "Abonnement reçu mais SUPABASE_SERVICE_ROLE_KEY absente : plan non appliqué.",
+      { subscriptionId: sub.id, status: sub.status },
+    );
+    return;
+  }
 
   const item = sub.items?.data?.[0];
   const priceId = item?.price?.id;
@@ -84,19 +95,37 @@ async function applySubscription(stripe: Stripe, sub: Stripe.Subscription) {
 
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
   const userId = await findUserId(stripe, admin, customerId);
-  if (!userId) return;
+  if (!userId) {
+    captureIssue("billing.webhook", "Abonnement sans compte VISITRADE correspondant.", {
+      subscriptionId: sub.id,
+      customerId: customerId ?? "(absent)",
+    });
+    return;
+  }
 
   const { data: before } = await admin
     .from("profiles")
-    .select("plan")
+    .select("plan, plan_status, past_due_since")
     .eq("id", userId)
     .single();
+
+  // Horodatage de l'impayé : posé au premier passage en `past_due`,
+  // conservé tant qu'on y reste, effacé dès que le paiement repasse.
+  // C'est lui qui borne la tolérance côté application.
+  let pastDueSince: string | null = null;
+  if (sub.status === "past_due") {
+    pastDueSince =
+      before?.plan_status === "past_due" && before?.past_due_since
+        ? String(before.past_due_since)
+        : new Date().toISOString();
+  }
 
   await admin
     .from("profiles")
     .update({
       plan,
       plan_status: sub.status,
+      past_due_since: pastDueSince,
       stripe_customer_id: customerId ?? null,
       stripe_subscription_id: sub.id,
       plan_renews_at: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,

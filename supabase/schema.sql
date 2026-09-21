@@ -139,3 +139,12 @@ alter table public.profiles add column if not exists plan_cancel_at_period_end b
 
 create index if not exists profiles_stripe_customer
   on public.profiles (stripe_customer_id);
+
+-- ── Impayés : borne de tolérance ───────────────────────────────
+-- `past_due` gardait l'accès ouvert sans limite de durée : si Stripe
+-- n'envoyait jamais `canceled` (relances épuisées côté Stripe, webhook
+-- manqué…), l'abonnement restait actif pour toujours. On horodate donc
+-- l'entrée en impayé ; passé le délai de grâce, l'application retombe
+-- au plan gratuit d'elle-même, sans dépendre d'un événement Stripe.
+alter table public.profiles
+  add column if not exists past_due_since timestamptz;

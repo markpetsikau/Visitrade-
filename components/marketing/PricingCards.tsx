@@ -52,25 +52,54 @@ export function PricingCards() {
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-center gap-3">
-        <span className={cn("text-sm", !yearly ? "text-ink" : "text-ink-muted")}>
-          Mensuel
-        </span>
+      <div className="mb-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
         <button
+          type="button"
+          onClick={() => setYearly(false)}
+          className={cn(
+            "text-sm transition-colors",
+            !yearly ? "text-ink" : "text-ink-muted hover:text-ink",
+          )}
+        >
+          Mensuel
+        </button>
+
+        {/* Piste 48×28 (bordure comprise) → 46×26 utiles ; bille de 20 px
+            avec 3 px de marge sur les quatre côtés. `shrink-0` est
+            indispensable : sans lui, la piste s'écrase dès que la ligne
+            manque de place et la bille sort par-dessus « Annuel ». */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={yearly}
+          aria-label="Facturation annuelle"
           onClick={() => setYearly((v) => !v)}
-          className="relative h-6 w-11 rounded-full border border-border-strong bg-surface-raised transition-colors"
-          aria-label="Basculer facturation annuelle"
+          className={cn(
+            "relative h-7 w-12 shrink-0 rounded-full border transition-colors",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:ring-offset-base",
+            yearly
+              ? "border-brand/50 bg-brand/15"
+              : "border-border-strong bg-surface-raised",
+          )}
         >
           <span
             className={cn(
-              "absolute top-0.5 h-4 w-4 rounded-full bg-brand transition-transform",
-              yearly ? "translate-x-[22px]" : "translate-x-0.5",
+              "absolute left-[3px] top-[3px] h-5 w-5 rounded-full transition-transform duration-200",
+              yearly ? "translate-x-5 bg-brand" : "translate-x-0 bg-ink-muted",
             )}
           />
         </button>
-        <span className={cn("text-sm", yearly ? "text-ink" : "text-ink-muted")}>
+
+        <button
+          type="button"
+          onClick={() => setYearly(true)}
+          className={cn(
+            "text-sm transition-colors",
+            yearly ? "text-ink" : "text-ink-muted hover:text-ink",
+          )}
+        >
           Annuel
-        </span>
+        </button>
         <Badge tone="brand">−34%</Badge>
       </div>
 

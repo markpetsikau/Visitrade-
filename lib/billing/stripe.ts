@@ -22,10 +22,18 @@ export function isStripeConfigured(): boolean {
 }
 
 export function priceIdFor(plan: Exclude<Plan, "free">, cycle: Cycle): string | undefined {
-  const monthly = process.env[PRICE_ENV[plan].monthly];
-  if (cycle === "monthly") return monthly;
-  // L'annuel est optionnel : à défaut, on facture au mois.
-  return process.env[PRICE_ENV[plan].yearly] || monthly;
+  // ⚠️ Aucun repli de l'annuel vers le mensuel. Avant, choisir « Annuel »
+  // sans STRIPE_PRICE_*_YEARLY configuré affichait « 228 € / an » et
+  // prélevait 29 € tous les mois : facturation différente de celle
+  // annoncée au client, donc pratique commerciale trompeuse.
+  return process.env[PRICE_ENV[plan][cycle]];
+}
+
+/** La facturation annuelle est-elle réellement branchée côté Stripe ? */
+export function isYearlyAvailable(): boolean {
+  return Boolean(
+    process.env.STRIPE_PRICE_PRO_YEARLY && process.env.STRIPE_PRICE_ELITE_YEARLY,
+  );
 }
 
 /** Retrouve le plan correspondant à un identifiant de prix Stripe. */
