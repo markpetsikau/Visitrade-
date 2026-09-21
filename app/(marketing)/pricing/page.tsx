@@ -17,6 +17,7 @@ const compare = [
   { label: "Watchlist", free: "3 actifs", pro: "Illimitée", elite: "Illimitée" },
   { label: "Portfolio", free: false, pro: true, elite: true },
   { label: "Alertes", free: false, pro: "Personnalisées", elite: "Temps réel" },
+  { label: "Prédictions de marché", free: "Aperçu", pro: "Aperçu", elite: "Toutes les questions" },
   { label: "Journal + analytics", free: false, pro: false, elite: true },
   { label: "Export (CSV / API)", free: false, pro: false, elite: true },
 ];

@@ -12,6 +12,8 @@ import {
   probabilityOf,
   type PredictionMarket,
 } from "@/lib/predictions/engine";
+import { PLANS } from "@/lib/constants";
+import { minPlanFor, PLAN_LABEL } from "@/lib/plans";
 import { cn } from "@/lib/utils";
 
 const REFRESH_MS = 20_000;
@@ -279,6 +281,8 @@ function MarketCard({ market }: { market: PredictionMarket }) {
 }
 
 function LockedCard({ count }: { count: number }) {
+  const required = minPlanFor("predictions");
+  const cta = PLANS.find((p) => p.id === required)?.cta ?? "Voir les tarifs";
   return (
     <article className="flex flex-col items-center justify-center rounded-2xl border border-brand/25 bg-brand/[0.05] p-6 text-center">
       <span className="grid h-11 w-11 place-items-center rounded-2xl bg-brand/12 text-brand">
@@ -288,13 +292,14 @@ function LockedCard({ count }: { count: number }) {
         {count} autres questions en direct
       </h3>
       <p className="mt-1.5 text-xs text-ink-muted">
-        Toutes les probabilités, tous les actifs et tous les horizons sont inclus dans le plan Pro.
+        Toutes les probabilités, tous les actifs et tous les horizons sont inclus dans le plan{" "}
+        {PLAN_LABEL[required]}.
       </p>
       <Link
         href="/pricing"
         className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-[#04110F] transition-colors hover:bg-brand-bright"
       >
-        <Sparkles className="h-4 w-4" /> Passer au Pro <ArrowRight className="h-4 w-4" />
+        <Sparkles className="h-4 w-4" /> {cta} <ArrowRight className="h-4 w-4" />
       </Link>
     </article>
   );

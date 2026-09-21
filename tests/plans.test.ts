@@ -24,11 +24,13 @@ describe("droits d'accès par plan", () => {
     expect(hasFeature("pro", "assistant")).toBe(true);
     expect(hasFeature("pro", "journal")).toBe(false);
     expect(hasFeature("pro", "export")).toBe(false);
+    expect(hasFeature("pro", "predictions")).toBe(false);
   });
 
   it("ouvre tout à Elite", () => {
     expect(hasFeature("elite", "journal")).toBe(true);
     expect(hasFeature("elite", "export")).toBe(true);
+    expect(hasFeature("elite", "predictions")).toBe(true);
   });
 
   it("traite un plan absent comme gratuit", () => {
@@ -38,6 +40,7 @@ describe("droits d'accès par plan", () => {
   it("annonce le bon plan minimum par fonctionnalité", () => {
     expect(minPlanFor("scenarios")).toBe("pro");
     expect(minPlanFor("journal")).toBe("elite");
+    expect(minPlanFor("predictions")).toBe("elite");
   });
 
   it("plafonne la watchlist du plan gratuit", () => {

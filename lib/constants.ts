@@ -69,6 +69,7 @@ export const PLANS: Plan[] = [
       "Tout le plan Pro, sans compromis",
       "Analyses IA quasi-illimitées + priorité",
       "Alertes temps réel multi-conditions",
+      "Prédictions de marché : toutes les questions, tous les horizons",
       "Journal de trading + analytics de performance",
       "Corrélations & scénarios approfondis",
       "Export de données (CSV / API)",

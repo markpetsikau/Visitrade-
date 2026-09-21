@@ -36,7 +36,7 @@ const MIN_RANK: Record<Feature, number> = {
   portfolio: 1, // Pro
   journal: 2, // Elite
   export: 2, // Elite
-  predictions: 1, // Pro
+  predictions: 2, // Elite
 };
 
 export function hasFeature(plan: Plan | undefined, f: Feature): boolean {
